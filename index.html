@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Quill Editor Embebible</title>
+    <link
+      href="https://cdn.quilljs.com/1.3.7/quill.snow.css"
+      rel="stylesheet" />
+    <style>
+      body {
+        margin: 0;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: white;
+      }
+
+      .editor-container {
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .editor-toolbar {
+        flex-shrink: 0;
+        border-bottom: 1px solid #e0e0e0;
+      }
+
+      .editor-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+      }
+
+      #editor {
+        flex: 1;
+        border: none;
+      }
+
+      .editor-actions {
+        flex-shrink: 0;
+        padding: 10px 15px;
+        background: #f8f9fa;
+        border-top: 1px solid #e0e0e0;
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+      }
+
+      .editor-actions button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 14px;
+        transition: all 0.2s;
+      }
+
+      .btn-save {
+        background: #28a745;
+        color: white;
+      }
+
+      .btn-save:hover {
+        background: #218838;
+      }
+
+      .btn-delete {
+        background: #dc3545;
+        color: white;
+      }
+
+      .btn-delete:hover {
+        background: #c82333;
+      }
+
+      .btn-save:disabled,
+      .btn-delete:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .ql-variable {
+        display: inline-flex;
+        align-items: center;
+        background: linear-gradient(135deg, #e3f2fd, #bbdefb) !important;
+        color: #0d47a1 !important;
+        font-weight: 600 !important;
+        padding: 2px 8px !important;
+        border-radius: 12px !important;
+        margin: 0 2px !important;
+        cursor: default !important;
+        user-select: none !important;
+        border: 1px solid #90caf9 !important;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+        transition: all 0.2s ease !important;
+        white-space: nowrap !important;
+        font-family: 'Consolas', monospace;
+        font-size: 13px;
+      }
+
+      .ql-variable:hover {
+        background: linear-gradient(135deg, #bbdefb, #90caf9) !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15) !important;
+      }
+
+      .ql-variable::before {
+        font-size: 11px;
+        margin-right: 4px;
+        opacity: 0.8;
+      }
+
+      .ql-variable.type-number {
+        background: linear-gradient(135deg, #fff3e0, #ffcc02) !important;
+        border-color: #ff9800 !important;
+        color: #e65100 !important;
+      }
+
+      .ql-variable.type-date {
+        background: linear-gradient(135deg, #f3e5f5, #ce93d8) !important;
+        border-color: #ab47bc !important;
+        color: #4a148c !important;
+      }
+
+      .ql-variable.required {
+        background: linear-gradient(135deg, #ffebee, #ffcdd2) !important;
+        border-color: #ef5350 !important;
+        color: #c62828 !important;
+      }
+
+      .ql-variable.required::after {
+        content: ' *';
+        color: #d32f2f;
+        font-weight: bold;
+      }
+
+      @keyframes variableInsert {
+        0% {
+          transform: scale(0.8);
+          opacity: 0.5;
+        }
+        50% {
+          transform: scale(1.1);
+        }
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+
+      .ql-variable.newly-inserted {
+        animation: variableInsert 0.4s ease-out;
+      }
+
+      .ql-editor {
+        font-size: 16px;
+        line-height: 1.6;
+      }
+
+      .loading-indicator {
+        display: none;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        padding: 20px;
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="editor-container">
+      <div class="editor-toolbar" id="toolbar">
+        <!-- Toolbar completo de Quill -->
+        <span class="ql-formats">
+          <select class="ql-font"></select>
+          <select class="ql-size"></select>
+        </span>
+        <span class="ql-formats">
+          <button class="ql-bold"></button>
+          <button class="ql-italic"></button>
+          <button class="ql-underline"></button>
+          <button class="ql-strike"></button>
+        </span>
+        <span class="ql-formats">
+          <select class="ql-color"></select>
+          <select class="ql-background"></select>
+        </span>
+        <span class="ql-formats">
+          <button class="ql-script" value="sub"></button>
+          <button class="ql-script" value="super"></button>
+        </span>
+        <span class="ql-formats">
+          <button class="ql-header" value="1"></button>
+          <button class="ql-header" value="2"></button>
+          <button class="ql-blockquote"></button>
+          <button class="ql-code-block"></button>
+        </span>
+        <span class="ql-formats">
+          <button class="ql-list" value="ordered"></button>
+          <button class="ql-list" value="bullet"></button>
+          <button class="ql-indent" value="-1"></button>
+          <button class="ql-indent" value="+1"></button>
+        </span>
+        <span class="ql-formats">
+          <button class="ql-direction" value="rtl"></button>
+          <select class="ql-align"></select>
+        </span>
+        <span class="ql-formats">
+          <button class="ql-link"></button>
+          <!-- <button class="ql-image"></button>
+          <button class="ql-video"></button>
+          <button class="ql-formula"></button> -->
+        </span>
+        <span class="ql-formats">
+          <button class="ql-clean"></button>
+        </span>
+      </div>
+
+      <div class="editor-content">
+        <div id="editor"></div>
+        <div class="loading-indicator" id="loadingIndicator">
+          Cargando contenido...
+        </div>
+      </div>
+
+      <div class="editor-actions">
+        <button class="btn-save" id="saveBtn" onclick="handleSave()">
+          Guardar
+        </button>
+        <button class="btn-delete" id="deleteBtn" onclick="handleDelete()">
+          Eliminar
+        </button>
+      </div>
+    </div>
+
+    <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+    <script>
+      // ========================================
+      // CONFIGURACIÓN DEL BLOT DE VARIABLE
+      // ========================================
+
+      const Parchment = Quill.import('parchment');
+
+      class VariableBlot extends Parchment.Embed {
+        static create(value) {
+          const node = super.create();
+          const varData =
+            typeof value === 'string'
+              ? { name: value, type: 'text', required: false }
+              : value;
+
+          // Configurar nodo
+          node.setAttribute('contenteditable', 'false');
+          node.dataset.name = varData.name;
+          node.dataset.type = varData.type;
+          node.dataset.required = varData.required;
+
+          // Clases CSS
+          node.classList.add('ql-variable');
+          if (varData.type !== 'text')
+            node.classList.add(`type-${varData.type}`);
+          if (varData.required) node.classList.add('required');
+
+          // Contenido
+          node.textContent = varData.name;
+
+          return node;
+        }
+
+        static value(node) {
+          return {
+            name: node.dataset.name,
+            type: node.dataset.type,
+            required: node.dataset.required === 'true',
+          };
+        }
+
+        static formats(node) {
+          return this.value(node);
+        }
+      }
+
+      VariableBlot.blotName = 'variable';
+      VariableBlot.tagName = 'span';
+      VariableBlot.className = 'ql-variable';
+      Quill.register(VariableBlot);
+
+      // ========================================
+      // FUNCIONES DE CODIFICACIÓN BASE64
+      // ========================================
+      function encodeBase64(content) {
+        try {
+          // Convertir el contenido Delta a JSON
+          const jsonContent = JSON.stringify(content);
+          // Codificar a Base64
+          return btoa(unescape(encodeURIComponent(jsonContent)));
+        } catch (error) {
+          console.error('Error al codificar en Base64:', error);
+          return null;
+        }
+      }
+
+      function decodeBase64(base64String) {
+        try {
+          // Decodificar Base64
+          const jsonContent = decodeURIComponent(escape(atob(base64String)));
+          // Convertir JSON a objeto Delta
+          return JSON.parse(jsonContent);
+        } catch (error) {
+          console.error('Error al decodificar Base64:', error);
+          return null;
+        }
+      }
+
+      // ========================================
+      // FUNCIÓN PARA GENERAR UUID
+      // ========================================
+      function generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(
+          /[xy]/g,
+          function (c) {
+            const r = (Math.random() * 16) | 0;
+            const v = c === 'x' ? r : (r & 0x3) | 0x8;
+            return v.toString(16);
+          }
+        );
+      }
+
+      // ========================================
+      // VARIABLES GLOBALES
+      // ========================================
+      let quillEditor;
+      let editorId = null;
+      let isContentLoaded = false;
+      let documentUUID = null;
+
+      // ========================================
+      // INICIALIZACIÓN DEL EDITOR
+      // ========================================
+      document.addEventListener('DOMContentLoaded', function () {
+        quillEditor = new Quill('#editor', {
+          theme: 'snow',
+          modules: {
+            toolbar: {
+              container: '#toolbar',
+              handlers: {},
+            },
+          },
+          placeholder: 'Escribe tu documento aquí...',
+        });
+
+        // Configurar toolbar personalizada
+        const toolbar = quillEditor.getModule('toolbar');
+        toolbar.addHandler('bold', () =>
+          quillEditor.format('bold', !quillEditor.getFormat().bold)
+        );
+
+        // Eventos del editor
+        quillEditor.on('text-change', function (delta, oldDelta, source) {
+          if (source === 'user' && isContentLoaded) {
+            notifyContentChanged();
+          }
+        });
+
+        // Obtener parámetros de la URL
+        const urlParams = new URLSearchParams(window.location.search);
+        editorId = urlParams.get('id');
+
+        const base64Content = urlParams.get('content');
+        // Obtener o generar UUID
+        documentUUID = urlParams.get('uuid');
+        console.log('Document UUID:', documentUUID);
+        console.log('Se pao conenido ', base64Content);
+        if (base64Content) {
+          showLoading(true);
+          console.log('llega ', base64Content);
+          window.editorAPI.setContent(base64Content);
+        }
+        // Notificar que el editor está listo
+        notifyEditorReady();
+
+        // Escuchar mensajes del padre
+        window.addEventListener('message', handleParentMessage);
+
+        isContentLoaded = true;
+      });
+
+      // ========================================
+      // API PÚBLICA DEL EDITOR
+      // ========================================
+      window.editorAPI = {
+        insertVariable: function (name, type = 'text', required = false) {
+          if (!quillEditor) return false;
+
+          const range = quillEditor.getSelection();
+          const insertIndex = range ? range.index : quillEditor.getLength();
+
+          try {
+            quillEditor.insertEmbed(
+              insertIndex,
+              'variable',
+              {
+                name: name.trim(),
+                type: type,
+                required: required,
+              },
+              Quill.sources.API
+            );
+
+            quillEditor.setSelection(insertIndex + 1);
+            setTimeout(() => animateNewVariable(name), 50);
+
+            notifyContentChanged();
+            return true;
+          } catch (error) {
+            console.error('Error al insertar variable:', error);
+            return false;
+          }
+        },
+
+        setContent: function (delta) {
+          if (!quillEditor || !delta) return false;
+
+          showLoading(true);
+
+          try {
+            isContentLoaded = false;
+
+            // Si el contenido viene como Base64, decodificarlo primero
+            const content =
+              typeof delta === 'string' ? decodeBase64(delta) : delta;
+            console.log('Contenido decodificdo ', content);
+            quillEditor.setContents(content);
+
+            setTimeout(() => {
+              isContentLoaded = true;
+              showLoading(false);
+            }, 100);
+
+            return true;
+          } catch (error) {
+            console.error('Error al establecer contenido:', error);
+            showLoading(false);
+            return false;
+          }
+        },
+
+        getContent: function (encode = false) {
+          if (!quillEditor) return null;
+          const content = quillEditor.getContents();
+          return encode ? encodeBase64(content) : content;
+        },
+
+        getHTML: function () {
+          return quillEditor ? quillEditor.root.innerHTML : '';
+        },
+
+        getVariables: function () {
+          if (!quillEditor) return [];
+
+          const variables = [];
+          const contents = quillEditor.getContents();
+
+          contents.ops.forEach((op) => {
+            if (
+              op.insert &&
+              typeof op.insert === 'object' &&
+              op.insert.variable
+            ) {
+              variables.push(op.insert.variable);
+            }
+          });
+
+          return variables;
+        },
+
+        focus: function () {
+          if (quillEditor) {
+            quillEditor.focus();
+            return true;
+          }
+          return false;
+        },
+
+        clear: function () {
+          if (quillEditor) {
+            quillEditor.setText('');
+            return true;
+          }
+          return false;
+        },
+      };
+
+      // ========================================
+      // FUNCIONES DE COMUNICACIÓN CON EL PADRE
+      // ========================================
+      function notifyEditorReady() {
+        sendMessageToParent('editor-ready', {
+          editorId: editorId,
+          uuid: documentUUID,
+          api: Object.keys(window.editorAPI),
+        });
+      }
+
+      function notifyContentChanged() {
+        sendMessageToParent('content-changed', {
+          editorId: editorId,
+          uuid: documentUUID,
+          content: window.editorAPI.getContent(true), // Codificado en Base64
+          html: window.editorAPI.getHTML(),
+          variables: window.editorAPI.getVariables(),
+        });
+      }
+
+      function sendMessageToParent(type, data) {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage(
+            {
+              type: type,
+              data: data,
+              source: 'quill-editor',
+            },
+            '*'
+          );
+        }
+      }
+
+      function handleParentMessage(event) {
+        if (!event.data || event.data.source !== 'quill-parent') return;
+
+        const { type, data } = event.data;
+
+        switch (type) {
+          case 'set-content':
+            if (data.content) {
+              window.editorAPI.setContent(data.content);
+            }
+            break;
+
+          case 'insert-variable':
+            if (data.name) {
+              window.editorAPI.insertVariable(
+                data.name,
+                data.type || 'text',
+                data.required || false
+              );
+            }
+            break;
+
+          case 'get-content':
+            sendMessageToParent('content-response', {
+              editorId: editorId,
+              uuid: documentUUID,
+              content: window.editorAPI.getContent(true), // Codificado en Base64
+              html: window.editorAPI.getHTML(),
+              variables: window.editorAPI.getVariables(),
+            });
+            break;
+
+          case 'focus-editor':
+            window.editorAPI.focus();
+            break;
+
+          case 'clear-editor':
+            window.editorAPI.clear();
+            break;
+        }
+      }
+
+      // ========================================
+      // FUNCIONES INTERNAS
+      // ========================================
+      function animateNewVariable(varName) {
+        const variables = document.querySelectorAll('.ql-variable');
+        variables.forEach((varNode) => {
+          if (varNode.dataset.name === varName) {
+            varNode.classList.add('newly-inserted');
+            setTimeout(() => {
+              varNode.classList.remove('newly-inserted');
+            }, 400);
+          }
+        });
+      }
+
+      function showLoading(show) {
+        const indicator = document.getElementById('loadingIndicator');
+        indicator.style.display = show ? 'block' : 'none';
+      }
+
+      // ========================================
+      // MANEJADORES DE BOTONES
+      // ========================================
+      function handleSave() {
+        const content = window.editorAPI.getContent(true); // Codificado en Base64
+        const html = window.editorAPI.getHTML();
+        const variables = window.editorAPI.getVariables();
+
+        // Enviar datos al padre
+        sendMessageToParent('save-requested', {
+          editorId: editorId,
+          uuid: documentUUID,
+          content: content,
+          html: html,
+          variables: variables,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Feedback visual
+        const saveBtn = document.getElementById('saveBtn');
+        const originalText = saveBtn.innerHTML;
+        saveBtn.innerHTML = '✅ Guardado';
+        saveBtn.disabled = true;
+
+        setTimeout(() => {
+          saveBtn.innerHTML = originalText;
+          saveBtn.disabled = false;
+        }, 2000);
+      }
+
+      function handleDelete() {
+        if (confirm('¿Estás seguro de que deseas eliminar este documento?')) {
+          sendMessageToParent('delete-requested', {
+            editorId: editorId,
+            uuid: documentUUID,
+            timestamp: new Date().toISOString(),
+          });
+
+          // Feedback visual
+          const deleteBtn = document.getElementById('deleteBtn');
+          const originalText = deleteBtn.innerHTML;
+          deleteBtn.innerHTML = '🗑️ Eliminando...';
+          deleteBtn.disabled = true;
+
+          // El padre decidirá si realmente eliminar o no
+          setTimeout(() => {
+            deleteBtn.innerHTML = originalText;
+            deleteBtn.disabled = false;
+          }, 3000);
+        }
+      }
+
+      // ========================================
+      // ATAJOS DE TECLADO
+      // ========================================
+      document.addEventListener('keydown', function (e) {
+        // Ctrl/Cmd + S para guardar
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+          e.preventDefault();
+          handleSave();
+        }
+
+        // Ctrl/Cmd + Shift + V para insertar variable rápida
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'V') {
+          e.preventDefault();
+          const varName = prompt('Nombre de la variable:');
+          if (varName) {
+            window.editorAPI.insertVariable(varName);
+          }
+        }
+      });
+
+      // ========================================
+      // PREVENIR PÉRDIDA DE DATOS
+      // ========================================
+      window.addEventListener('beforeunload', function (e) {
+        if (quillEditor && quillEditor.getText().trim().length > 0) {
+          e.preventDefault();
+          e.returnValue = '';
+          return '';
+        }
+      });
+    </script>
+  </body>
+</html>
