@@ -393,7 +393,7 @@
       // API PÚBLICA DEL EDITOR
       // ========================================
       window.editorAPI = {
-        insertVariable: function (name, type = 'text', required = false) {
+        insertVariable: function (name, type = 'text', required = false, value = null) {
           if (!quillEditor) return false;
 
           const range = quillEditor.getSelection();
