@@ -159,31 +159,6 @@
         line-height: 1.6;
       }
 
-      .ql-preview-variable {
-    display: inline-flex;
-    align-items: center;
-    background: linear-gradient(135deg, #fff3cd, #ffeaa7) !important;
-    color: #856404 !important;
-    font-weight: 600 !important;
-    padding: 2px 8px !important;
-    border-radius: 12px !important;
-    margin: 0 2px !important;
-    cursor: default !important;
-    user-select: none !important;
-    border: 1px solid #ffc107 !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
-    transition: all 0.2s ease !important;
-    white-space: nowrap !important;
-    font-family: 'Consolas', monospace;
-    font-size: 13px;
-}
-
-.ql-preview-variable:hover {
-    background: linear-gradient(135deg, #ffeaa7, #fdcb6e) !important;
-    transform: translateY(-1px) !important;
-    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15) !important;
-}
-
       .loading-indicator {
         display: none;
         position: absolute;
@@ -315,53 +290,6 @@
       VariableBlot.className = 'ql-variable';
       Quill.register(VariableBlot);
 
-      // ==========================================
-      // NEW
-      // ==========================================
-      // ========================================
-// PREVIEW VARIABLE BLOT CONFIGURATION
-// ========================================
-class PreviewVariableBlot extends Parchment.Embed {
-    static create(value) {
-        const node = super.create();
-        const varData = value;
-
-        // Configure node as span
-        node.setAttribute('contenteditable', 'false');
-        node.dataset.name = varData.name;
-        node.dataset.type = varData.type;
-        node.dataset.required = varData.required;
-
-        // Add preview-specific styling
-        node.classList.add('ql-preview-variable');
-        if (varData.type !== 'text') node.classList.add(`type-${varData.type}`);
-        if (varData.required) node.classList.add('required');
-
-        // Display the actual value, not the variable name
-        node.textContent = varData.value;
-
-        return node;
-    }
-
-    static value(node) {
-        return {
-            name: node.dataset.name,
-            type: node.dataset.type,
-            required: node.dataset.required === 'true',
-            value: node.textContent
-        };
-    }
-
-    static formats(node) {
-        return this.value(node);
-    }
-}
-
-PreviewVariableBlot.blotName = 'preview-variable';
-PreviewVariableBlot.tagName = 'span';
-PreviewVariableBlot.className = 'ql-preview-variable';
-Quill.register(PreviewVariableBlot);
-
       // ========================================
       // FUNCIONES DE CODIFICACIÓN BASE64
       // ========================================
@@ -403,81 +331,6 @@ Quill.register(PreviewVariableBlot);
         );
       }
 
-      // =======================================
-      // NEW
-      // =========================================
-
-      // ========================================
-// SIMPLE PREVIEW MODE FUNCTIONS
-// ========================================
-function enterPreviewMode() {
-    if (!quillEditor || isPreviewMode) return false;
-    
-    // Store original content
-    originalContentB64 = window.editorAPI.getContent(true);
-    
-    // Generate preview content
-    const previewContent = generatePreviewContent();
-    
-    // Apply preview content
-    isContentLoaded = false;
-    quillEditor.setContents(previewContent);
-    quillEditor.disable(); // Disable editing in preview mode
-    isContentLoaded = true;
-    
-    isPreviewMode = true;
-    return true;
-}
-
-function exitPreviewMode() {
-    if (!originalContentB64 || !isPreviewMode) return false;
-    
-    // Restore original content
-    const originalContent = decodeBase64(originalContentB64);
-    
-    isContentLoaded = false;
-    quillEditor.setContents(originalContent);
-    quillEditor.enable(); // Re-enable editing
-    isContentLoaded = true;
-    
-    isPreviewMode = false;
-    originalContentB64 = null;
-    return true;
-}
-
-function generatePreviewContent() {
-    console.log('=== GENERATING PREVIEW CONTENT ===');
-    const currentContent = quillEditor.getContents();
-    const newOps = [];
-    
-    currentContent.ops.forEach((op) => {
-        if (op.insert && typeof op.insert === 'object' && op.insert.variable) {
-            // Replace variable with its value as a custom embed (not regular text)
-            const variable = op.insert.variable;
-            const value = variableValues[variable.name] || `{{${variable.name}}}`;
-            
-            console.log(`Replacing "${variable.name}" with "${value}"`);
-            
-            // Create a custom embed that looks like a span
-            newOps.push({
-                insert: {
-                    'preview-variable': {
-                        name: variable.name,
-                        value: value,
-                        type: variable.type,
-                        required: variable.required
-                    }
-                }
-            });
-        } else {
-            // Keep regular content
-            newOps.push(op);
-        }
-    });
-    
-    return { ops: newOps };
-}
-
       // ========================================
       // VARIABLES GLOBALES
       // ========================================
@@ -486,12 +339,6 @@ function generatePreviewContent() {
       let isContentLoaded = false;
       let documentUUID = null;
       let variableValues = {};
-      // =======================================
-      // NEW
-      // ========================================
-      let isPreviewMode = false;
-      let originalContentB64 = null;
-      let editModeParam = 'yes';
 
       // ========================================
       // INICIALIZACIÓN DEL EDITOR
@@ -529,18 +376,6 @@ function generatePreviewContent() {
         // Obtener o generar UUID
         documentUUID = urlParams.get('uuid');
 
-        //=========================================
-        // NEW
-        //=========================================
-        editModeParam = urlParams.get('editmode') || 'yes';
-        isPreviewMode = editModeParam.toLowerCase() === 'no';
-        
-        // ADD DEBUGGING:
-console.log('=== PREVIEW MODE DEBUG ===');
-console.log('editModeParam:', editModeParam);
-console.log('isPreviewMode:', isPreviewMode);
-console.log('variableValues:', variableValues);
-console.log('============================');
         
         console.log('Document UUID:', documentUUID);
         console.log('Se pao conenido ', base64Content);
@@ -556,17 +391,6 @@ console.log('============================');
         window.addEventListener('message', handleParentMessage);
 
         isContentLoaded = true;
-
-        // ================================
-        // NEW
-        //=======================================
-        if (isPreviewMode) {
-    setTimeout(() => {
-        enterPreviewMode();
-    }, 300);
-}
-
-        
       });
 
       // ========================================
@@ -625,47 +449,32 @@ console.log('============================');
           }
         },
 
-setContent: function (delta) {
-    if (!quillEditor || !delta) return false;
+        setContent: function (delta) {
+          if (!quillEditor || !delta) return false;
 
-    showLoading(true);
+          showLoading(true);
 
-    try {
-        isContentLoaded = false;
+          try {
+            isContentLoaded = false;
 
-        // Si el contenido viene como Base64, decodificarlo primero
-        const content = typeof delta === 'string' ? decodeBase64(delta) : delta;
-        console.log('Contenido decodificdo ', content);
-        
-        // 🔥 NEW: Extract variable values from content
-        if (content && content.ops) {
-            content.ops.forEach((op) => {
-                if (op.insert && typeof op.insert === 'object' && op.insert.variable) {
-                    const variable = op.insert.variable;
-                    // Check if the variable has a stored value (from previous saves)
-                    if (variable.value && variable.value !== null && variable.value !== '') {
-                        variableValues[variable.name] = variable.value;
-                        console.log(`Loaded variable value: ${variable.name} = ${variable.value}`);
-                    }
-                }
-            });
-        }
-        console.log('Final variableValues after loading:', variableValues);
+            // Si el contenido viene como Base64, decodificarlo primero
+            const content =
+              typeof delta === 'string' ? decodeBase64(delta) : delta;
+            console.log('Contenido decodificdo ', content);
+            quillEditor.setContents(content);
 
-        quillEditor.setContents(content);
+            setTimeout(() => {
+              isContentLoaded = true;
+              showLoading(false);
+            }, 100);
 
-        setTimeout(() => {
-            isContentLoaded = true;
+            return true;
+          } catch (error) {
+            console.error('Error al establecer contenido:', error);
             showLoading(false);
-        }, 100);
-
-        return true;
-    } catch (error) {
-        console.error('Error al establecer contenido:', error);
-        showLoading(false);
-        return false;
-    }
-},
+            return false;
+          }
+        },
 
         getContent: function (encode = false) {
           if (!quillEditor) return null;
@@ -717,19 +526,6 @@ setContent: function (delta) {
           }
           return false;
         },
-
-        // ====================================
-        // NEW
-        // ===================================
-        // ADD THESE MISSING METHODS:
-togglePreviewMode: function(enable = null) {
-    const shouldEnable = enable !== null ? enable : !isPreviewMode;
-    return shouldEnable ? enterPreviewMode() : exitPreviewMode();
-},
-
-getPreviewMode: function() {
-    return isPreviewMode;
-},
       };
 
       // ========================================
@@ -842,72 +638,34 @@ getPreviewMode: function() {
       }
 
       // ========================================
-      // MANEJADORES DE BOTONES - modified
+      // MANEJADORES DE BOTONES
       // ========================================
-function handleSave() {
-    console.log('=== SAVING CONTENT ===');
-    console.log('Current isPreviewMode:', isPreviewMode);
-    
-    let contentToSave;
-    let htmlToSave;
-    
-    if (isPreviewMode && originalContentB64) {
-        // Save original variable content, not preview
-        console.log('Saving original variable content (Base64)');
-        contentToSave = originalContentB64; // This is already Base64
-        
-        // Get HTML from original content
-        const originalContent = decodeBase64(originalContentB64);
-        if (originalContent) {
-            const tempContent = quillEditor.getContents();
-            isContentLoaded = false;
-            quillEditor.setContents(originalContent);
-            htmlToSave = quillEditor.root.innerHTML;
-            quillEditor.setContents(tempContent);
-            isContentLoaded = true;
-        } else {
-            htmlToSave = quillEditor.root.innerHTML; // Fallback
-        }
-    } else {
-        // Normal save - ensure we get Base64 string
-        console.log('Saving current edit content');
-        const currentContent = quillEditor.getContents();
-        contentToSave = encodeBase64(currentContent); // Explicitly encode
-        htmlToSave = quillEditor.root.innerHTML;
-    }
-    
-    // Get variables with their current values
-    const variables = window.editorAPI.getVariables();
-    
-    console.log('Content to save (should be Base64 string):', typeof contentToSave, contentToSave);
-    console.log('Variables to save:', variables);
+      function handleSave() {
+        const content = window.editorAPI.getContent(true); // Codificado en Base64
+        const html = window.editorAPI.getHTML();
+        const variables = window.editorAPI.getVariables();
 
-    // Ensure contentToSave is a string
-    if (typeof contentToSave !== 'string') {
-        console.error('❌ contentToSave is not a string!', typeof contentToSave, contentToSave);
-        contentToSave = encodeBase64(quillEditor.getContents()); // Emergency fallback
-    }
+        // Enviar datos al padre
+        sendMessageToParent('save-requested', {
+          editorId: editorId,
+          uuid: documentUUID,
+          content: content,
+          html: html,
+          variables: variables,
+          timestamp: new Date().toISOString(),
+        });
 
-    sendMessageToParent('save-requested', {
-        editorId: editorId,
-        uuid: documentUUID,
-        content: contentToSave,
-        html: htmlToSave,
-        variables: variables,
-        timestamp: new Date().toISOString(),
-    });
+        // Feedback visual
+        const saveBtn = document.getElementById('saveBtn');
+        const originalText = saveBtn.innerHTML;
+        saveBtn.innerHTML = '✅ Guardado';
+        saveBtn.disabled = true;
 
-    // Visual feedback
-    const saveBtn = document.getElementById('saveBtn');
-    const originalText = saveBtn.innerHTML;
-    saveBtn.innerHTML = '✅ Guardado';
-    saveBtn.disabled = true;
-
-    setTimeout(() => {
-        saveBtn.innerHTML = originalText;
-        saveBtn.disabled = false;
-    }, 2000);
-}
+        setTimeout(() => {
+          saveBtn.innerHTML = originalText;
+          saveBtn.disabled = false;
+        }, 2000);
+      }
 
       function handleDelete() {
         if (confirm('¿Estás seguro de que deseas eliminar este documento?')) {
