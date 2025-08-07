@@ -627,6 +627,17 @@ function transformContentToPreview(content, variables) {
             setTimeout(() => animateNewVariable(name), 50);
 
             notifyContentChanged();
+            
+        // 🔥 ADD THIS NEW CODE - Refresh preview mode if active
+        console.log('🔄 Checking if preview mode needs refresh...');
+        console.log('🔄 Current isPreviewMode:', isPreviewMode);
+        if (isPreviewMode) {
+            console.log('🔄 Refreshing preview mode after variable insertion...');
+            setTimeout(() => {
+                window.editorAPI.refreshPreviewMode();
+            }, 100); // Small delay to ensure DOM is updated
+        }
+            
             return true;
           } catch (error) {
             console.error('Error al insertar variable:', error);
@@ -730,13 +741,20 @@ function transformContentToPreview(content, variables) {
           return isPreviewMode;
         },
 
-        refreshPreviewMode: function() {
-          if (isPreviewMode) {
-            exitPreviewMode();
+refreshPreviewMode: function() {
+    console.log('🔄 refreshPreviewMode called');
+    console.log('🔄 Current isPreviewMode:', isPreviewMode);
+    
+    if (isPreviewMode) {
+        console.log('🔄 Exiting preview mode first...');
+        exitPreviewMode();
+        console.log('🔄 Re-entering preview mode...');
+        setTimeout(() => {
             enterPreviewMode();
-          }
-          return isPreviewMode;
-        },
+        }, 50);
+    }
+    return isPreviewMode;
+},
       };
 
       // ========================================
