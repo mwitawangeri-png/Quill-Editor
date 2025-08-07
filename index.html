@@ -501,6 +501,14 @@ function notifyModeChanged() {
         documentUUID = urlParams.get('uuid');
         editModeParam = urlParams.get('editmode') || 'yes'; // NEW LINE
         isPreviewMode = editModeParam.toLowerCase() === 'no'; // NEW LINE
+
+// PUT THE DEBUGGING CODE RIGHT HERE:
+console.log('=== URL PARAMETER DEBUG ===');
+console.log('Full URL:', window.location.href);
+console.log('Search params:', window.location.search);
+console.log('editmode param:', editModeParam);
+console.log('isPreviewMode:', isPreviewMode);
+console.log('================================');
         
         console.log('Document UUID:', documentUUID);
         console.log('Se pao conenido ', base64Content);
