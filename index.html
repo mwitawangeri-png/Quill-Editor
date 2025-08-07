@@ -311,7 +311,7 @@
       // ========================================
 
       const Parchment = Quill.import('parchment');
-
+      const Delta = Quill.import('delta'); // ADD THIS LINE
       class VariableBlot extends Parchment.Embed {
         static create(value) {
           const node = super.create();
