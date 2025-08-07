@@ -22,7 +22,7 @@
 
       .editor-toolbar {
         flex-shrink: 0;
-        border-bottom: 1px solid #e0e0e0;
+        border-bottom: 1px solid #ba3f3f;
       }
 
       .editor-content {
@@ -68,6 +68,7 @@
       .btn-delete {
         background: #dc3545;
         color: white;
+        display: none !important;
       }
 
       .btn-delete:hover {
@@ -337,6 +338,7 @@
       let editorId = null;
       let isContentLoaded = false;
       let documentUUID = null;
+      let variableValues = {};
 
       // ========================================
       // INICIALIZACIÓN DEL EDITOR
@@ -393,7 +395,13 @@
       // API PÚBLICA DEL EDITOR
       // ========================================
       window.editorAPI = {
-        insertVariable: function (name, type = 'text', required = false) {
+        insertVariable: function (name, type = 'text', required = false, value = null) {
+    console.log('=== insertVariable API CALLED ===');
+    console.log('Received name:', name);
+    console.log('Received type:', type);
+    console.log('Received required:', required);
+    console.log('Received value:', value);
+          
           if (!quillEditor) return false;
 
           const range = quillEditor.getSelection();
@@ -412,6 +420,23 @@
             );
 
             quillEditor.setSelection(insertIndex + 1);
+
+                    console.log('=== ABOUT TO STORE VALUE ===');
+        console.log('Value check - value !== null:', value !== null);
+        console.log('Value check - value !== undefined:', value !== undefined);
+        console.log('Value check - value !== "":', value !== '');
+        console.log('variableValues before:', variableValues);
+            
+       // ADD THESE LINES - YOU'RE MISSING THIS!
+            
+        if (value !== null && value !== undefined && value !== '') {
+            variableValues[name.trim()] = value;
+            console.log(`Variable value stored: ${name.trim()} = ${value}`);
+          console.log('variableValues after:', variableValues);
+        }else {
+            console.log('❌ Value not stored - failed conditions');
+        }
+            
             setTimeout(() => animateNewVariable(name), 50);
 
             notifyContentChanged();
@@ -471,7 +496,13 @@
               typeof op.insert === 'object' &&
               op.insert.variable
             ) {
-              variables.push(op.insert.variable);
+              const variable = op.insert.variable;
+              variables.push({
+                name: variable.name,
+                type: variable.type,
+                required: variable.required,
+                value: variableValues[variable.name] || null 
+            });
             }
           });
 
@@ -533,6 +564,11 @@
         if (!event.data || event.data.source !== 'quill-parent') return;
 
         const { type, data } = event.data;
+        
+    // ADD DEBUGGING
+    console.log('=== IFRAME RECEIVED MESSAGE ===');
+    console.log('Message type:', type);
+    console.log('Message data:', data);
 
         switch (type) {
           case 'set-content':
@@ -543,10 +579,18 @@
 
           case 'insert-variable':
             if (data.name) {
+
+                console.log('=== CALLING insertVariable ===');
+                console.log('Name:', data.name);
+                console.log('Type:', data.type || 'text');
+                console.log('Required:', data.required || false);
+                console.log('Value:', data.value || null);
+              
               window.editorAPI.insertVariable(
                 data.name,
                 data.type || 'text',
-                data.required || false
+                data.required || false,
+                data.value || null
               );
             }
             break;
