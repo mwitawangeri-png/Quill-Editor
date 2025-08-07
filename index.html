@@ -159,29 +159,70 @@
         line-height: 1.6;
       }
 
-      .ql-preview-variable {
-    display: inline-flex;
-    align-items: center;
-    background: linear-gradient(135deg, #fff3cd, #ffeaa7) !important;
-    color: #856404 !important;
-    font-weight: 600 !important;
-    padding: 2px 8px !important;
-    border-radius: 12px !important;
-    margin: 0 2px !important;
-    cursor: default !important;
-    user-select: none !important;
-    border: 1px solid #ffc107 !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
-    transition: all 0.2s ease !important;
-    white-space: nowrap !important;
-    font-family: 'Consolas', monospace;
-    font-size: 13px;
+      /* Preview Variable Styling */
+.ql-preview-variable {
+  display: inline-flex;
+  align-items: center;
+  background: linear-gradient(135deg, #e8f5e8, #c8e6c9) !important;
+  color: #2e7d32 !important;
+  font-weight: 500 !important;
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+  margin: 0 1px !important;
+  cursor: default !important;
+  user-select: none !important;
+  border: 1px solid #4caf50 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+  transition: all 0.2s ease !important;
+  white-space: nowrap !important;
+  font-family: inherit;
+  font-size: inherit;
 }
 
 .ql-preview-variable:hover {
-    background: linear-gradient(135deg, #ffeaa7, #fdcb6e) !important;
-    transform: translateY(-1px) !important;
-    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15) !important;
+  background: linear-gradient(135deg, #c8e6c9, #a5d6a7) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15) !important;
+}
+
+.ql-preview-variable.type-number {
+  background: linear-gradient(135deg, #fff8e1, #ffecb3) !important;
+  border-color: #ffc107 !important;
+  color: #f57c00 !important;
+}
+
+.ql-preview-variable.type-date {
+  background: linear-gradient(135deg, #f3e5f5, #e1bee7) !important;
+  border-color: #ab47bc !important;
+  color: #6a1b9a !important;
+}
+
+.ql-preview-variable.required {
+  background: linear-gradient(135deg, #ffebee, #ffcdd2) !important;
+  border-color: #f44336 !important;
+  color: #c62828 !important;
+}
+
+.ql-preview-variable.required::after {
+  content: ' *';
+  color: #d32f2f;
+  font-weight: bold;
+}
+
+/* Preview Mode Container Styling */
+.editor-container.preview-mode {
+  border: 2px solid #4caf50;
+  border-radius: 6px;
+}
+
+.editor-container.preview-mode .editor-toolbar {
+  background: #e8f5e8;
+  border-bottom-color: #4caf50;
+}
+
+/* Animation for newly inserted variables */
+.ql-preview-variable.newly-inserted {
+  animation: variableInsert 0.4s ease-out;
 }
 
       .loading-indicator {
@@ -272,39 +313,42 @@
       const Parchment = Quill.import('parchment');
 
       class VariableBlot extends Parchment.Embed {
-        static create(value) {
-          const node = super.create();
-          const varData =
-            typeof value === 'string'
-              ? { name: value, type: 'text', required: false }
-              : value;
+static create(value) {
+  const node = super.create();
+  const varData =
+    typeof value === 'string'
+      ? { name: value, type: 'text', required: false, value: null }
+      : value;
 
-          // Configurar nodo
-          node.setAttribute('contenteditable', 'false');
-          node.dataset.name = varData.name;
-          node.dataset.type = varData.type;
-          node.dataset.required = varData.required;
+  // Configure nodo
+  node.setAttribute('contenteditable', 'false');
+  node.dataset.name = varData.name;
+  node.dataset.type = varData.type;
+  node.dataset.required = varData.required;
+  
+  // NEW: Store the value in the dataset
+  node.dataset.value = varData.value || '';
 
-          // Clases CSS
-          node.classList.add('ql-variable');
-          if (varData.type !== 'text')
-            node.classList.add(`type-${varData.type}`);
-          if (varData.required) node.classList.add('required');
+  // Clases CSS
+  node.classList.add('ql-variable');
+  if (varData.type !== 'text')
+    node.classList.add(`type-${varData.type}`);
+  if (varData.required) node.classList.add('required');
 
-          // Contenido
-          node.textContent = varData.name;
+  // Contenido - show variable name, not value
+  node.textContent = varData.name;
 
-          return node;
-        }
+  return node;
+}
 
-        static value(node) {
-          return {
-            name: node.dataset.name,
-            type: node.dataset.type,
-            required: node.dataset.required === 'true',
-          };
-        }
-
+static value(node) {
+  return {
+    name: node.dataset.name,
+    type: node.dataset.type,
+    required: node.dataset.required === 'true',
+    value: node.dataset.value || null // NEW: Include value in Delta
+  };
+}
         static formats(node) {
           return this.value(node);
         }
@@ -315,52 +359,233 @@
       VariableBlot.className = 'ql-variable';
       Quill.register(VariableBlot);
 
-      // ==========================================
-      // NEW
-      // ==========================================
-      // ========================================
-// PREVIEW VARIABLE BLOT CONFIGURATION
-// ========================================
-class PreviewVariableBlot extends Parchment.Embed {
-    static create(value) {
-        const node = super.create();
-        const varData = value;
+      // =========================================
+      // NEW CODE
+      // =========================================
 
-        // Configure node as span
-        node.setAttribute('contenteditable', 'false');
-        node.dataset.name = varData.name;
-        node.dataset.type = varData.type;
-        node.dataset.required = varData.required;
+      class PreviewVariableBlot extends Parchment.Embed {
+  static create(value) {
+    const node = super.create();
+    const varData = typeof value === 'string' 
+      ? { name: value, type: 'text', required: false, displayValue: value }
+      : value;
 
-        // Add preview-specific styling
-        node.classList.add('ql-preview-variable');
-        if (varData.type !== 'text') node.classList.add(`type-${varData.type}`);
-        if (varData.required) node.classList.add('required');
+    node.setAttribute('contenteditable', 'false');
+    node.dataset.name = varData.name;
+    node.dataset.type = varData.type;
+    node.dataset.required = varData.required;
+    node.dataset.originalName = varData.name;
 
-        // Display the actual value, not the variable name
-        node.textContent = varData.value;
+    node.classList.add('ql-preview-variable');
+    if (varData.type !== 'text') node.classList.add(`type-${varData.type}`);
+    if (varData.required) node.classList.add('required');
 
-        return node;
-    }
+    node.textContent = varData.displayValue || varData.name;
+    return node;
+  }
 
-    static value(node) {
-        return {
-            name: node.dataset.name,
-            type: node.dataset.type,
-            required: node.dataset.required === 'true',
-            value: node.textContent
-        };
-    }
+  static value(node) {
+    return {
+      name: node.dataset.name,
+      type: node.dataset.type,
+      required: node.dataset.required === 'true',
+      displayValue: node.textContent,
+      originalName: node.dataset.originalName
+    };
+  }
 
-    static formats(node) {
-        return this.value(node);
-    }
+  static formats(node) {
+    return this.value(node);
+  }
 }
 
-PreviewVariableBlot.blotName = 'preview-variable';
+PreviewVariableBlot.blotName = 'previewVariable';
 PreviewVariableBlot.tagName = 'span';
 PreviewVariableBlot.className = 'ql-preview-variable';
 Quill.register(PreviewVariableBlot);
+// ================================
+      // NEW
+      // ===============================
+
+      function detectEditorModeFromURL() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const editorMode = urlParams.get('editormode');
+  
+  console.log('=== EDITOR MODE DETECTION ===');
+  console.log('editormode parameter:', editorMode);
+  
+  targetPreviewMode = editorMode === 'no';
+  console.log('Target preview mode:', targetPreviewMode);
+  return targetPreviewMode;
+}
+
+function enterPreviewMode() {
+  if (isPreviewMode || !quillEditor) return false;
+  
+  console.log('=== ENTERING PREVIEW MODE ===');
+  
+  try {
+    originalContentBackup = quillEditor.getContents();
+    transformationMap.clear();
+    
+    const transformedOps = originalContentBackup.ops.map((op, index) => {
+      if (op.insert && typeof op.insert === 'object' && op.insert.variable) {
+        const variable = op.insert.variable;
+        // Use value from Delta first, then fallback to variableValues
+        const displayValue = variable.value || variableValues[variable.name] || `{{${variable.name}}}`;
+        
+        transformationMap.set(index, {
+          originalVariable: variable,
+          displayValue: displayValue
+        });
+        
+        console.log(`Transforming variable: ${variable.name} -> ${displayValue}`);
+        
+        return {
+          insert: {
+            previewVariable: {
+              name: variable.name,
+              type: variable.type,
+              required: variable.required,
+              displayValue: displayValue,
+              originalName: variable.name,
+              value: variable.value // Preserve original value
+            }
+          }
+        };
+      }
+      return op;
+    });
+    
+    isContentLoaded = false;
+    quillEditor.setContents(new Delta(transformedOps));
+    isContentLoaded = true;
+    
+    isPreviewMode = true;
+    updatePreviewModeUI();
+    notifyPreviewModeChanged();
+    
+    console.log('=== PREVIEW MODE ENTERED SUCCESSFULLY ===');
+    return true;
+    
+  } catch (error) {
+    console.error('Error entering preview mode:', error);
+    if (originalContentBackup) {
+      quillEditor.setContents(originalContentBackup);
+    }
+    return false;
+  }
+}
+
+function exitPreviewMode() {
+  if (!isPreviewMode || !quillEditor || !originalContentBackup) return false;
+  
+  console.log('=== EXITING PREVIEW MODE ===');
+  
+  try {
+    syncPreviewVariableChanges();
+    
+    isContentLoaded = false;
+    quillEditor.setContents(originalContentBackup);
+    isContentLoaded = true;
+    
+    isPreviewMode = false;
+    originalContentBackup = null;
+    transformationMap.clear();
+    
+    updatePreviewModeUI();
+    notifyPreviewModeChanged();
+    
+    console.log('=== PREVIEW MODE EXITED SUCCESSFULLY ===');
+    return true;
+    
+  } catch (error) {
+    console.error('Error exiting preview mode:', error);
+    return false;
+  }
+}
+
+function applyCorrectModeFromURL() {
+  console.log('=== APPLYING CORRECT MODE FROM URL ===');
+  console.log('Current preview mode:', isPreviewMode);
+  console.log('Target preview mode:', targetPreviewMode);
+  
+  if (targetPreviewMode && !isPreviewMode) {
+    console.log('Switching to preview mode as requested by URL parameter');
+    return enterPreviewMode();
+  } else if (!targetPreviewMode && isPreviewMode) {
+    console.log('Switching to edit mode as requested by URL parameter');
+    return exitPreviewMode();
+  }
+  
+  console.log('Already in correct mode, no change needed');
+  return true;
+}
+
+function syncPreviewVariableChanges() {
+  if (!isPreviewMode) return;
+  
+  console.log('=== SYNCING PREVIEW VARIABLE CHANGES ===');
+  
+  const currentContent = quillEditor.getContents();
+  let hasChanges = false;
+  
+  currentContent.ops.forEach(op => {
+    if (op.insert && typeof op.insert === 'object' && op.insert.previewVariable) {
+      const previewVar = op.insert.previewVariable;
+      const originalName = previewVar.originalName || previewVar.name;
+      const currentDisplayValue = previewVar.displayValue;
+      
+      if (variableValues[originalName] !== currentDisplayValue) {
+        console.log(`Variable value changed: ${originalName} = ${currentDisplayValue}`);
+        variableValues[originalName] = currentDisplayValue;
+        hasChanges = true;
+      }
+    }
+  });
+  
+  if (hasChanges) {
+    console.log('Variable values updated:', variableValues);
+    notifyContentChanged();
+  }
+}
+
+function updatePreviewModeUI() {
+  const editorContainer = document.querySelector('.editor-container');
+  if (editorContainer) {
+    editorContainer.classList.toggle('preview-mode', isPreviewMode);
+  }
+  
+  const toolbar = document.querySelector('.editor-toolbar');
+  if (toolbar) {
+    toolbar.style.display = isPreviewMode ? 'none' : 'flex';
+  }
+  
+  const saveBtn = document.getElementById('saveBtn');
+  if (saveBtn) {
+    saveBtn.textContent = isPreviewMode ? 'Guardar Vista' : 'Guardar';
+  }
+  
+  console.log(`UI updated for ${isPreviewMode ? 'preview' : 'edit'} mode`);
+}
+
+function notifyPreviewModeChanged() {
+  sendMessageToParent('preview-mode-changed', {
+    editorId: editorId,
+    uuid: documentUUID,
+    isPreviewMode: isPreviewMode,
+    timestamp: new Date().toISOString()
+  });
+}
+
+function refreshPreviewMode() {
+  if (!isPreviewMode) return false;
+  
+  console.log('=== REFRESHING PREVIEW MODE ===');
+  exitPreviewMode();
+  return enterPreviewMode();
+}
+
 
       // ========================================
       // FUNCIONES DE CODIFICACIÓN BASE64
@@ -403,81 +628,6 @@ Quill.register(PreviewVariableBlot);
         );
       }
 
-      // =======================================
-      // NEW
-      // =========================================
-
-      // ========================================
-// SIMPLE PREVIEW MODE FUNCTIONS
-// ========================================
-function enterPreviewMode() {
-    if (!quillEditor || isPreviewMode) return false;
-    
-    // Store original content
-    originalContentB64 = window.editorAPI.getContent(true);
-    
-    // Generate preview content
-    const previewContent = generatePreviewContent();
-    
-    // Apply preview content
-    isContentLoaded = false;
-    quillEditor.setContents(previewContent);
-    quillEditor.disable(); // Disable editing in preview mode
-    isContentLoaded = true;
-    
-    isPreviewMode = true;
-    return true;
-}
-
-function exitPreviewMode() {
-    if (!originalContentB64 || !isPreviewMode) return false;
-    
-    // Restore original content
-    const originalContent = decodeBase64(originalContentB64);
-    
-    isContentLoaded = false;
-    quillEditor.setContents(originalContent);
-    quillEditor.enable(); // Re-enable editing
-    isContentLoaded = true;
-    
-    isPreviewMode = false;
-    originalContentB64 = null;
-    return true;
-}
-
-function generatePreviewContent() {
-    console.log('=== GENERATING PREVIEW CONTENT ===');
-    const currentContent = quillEditor.getContents();
-    const newOps = [];
-    
-    currentContent.ops.forEach((op) => {
-        if (op.insert && typeof op.insert === 'object' && op.insert.variable) {
-            // Replace variable with its value as a custom embed (not regular text)
-            const variable = op.insert.variable;
-            const value = variableValues[variable.name] || `{{${variable.name}}}`;
-            
-            console.log(`Replacing "${variable.name}" with "${value}"`);
-            
-            // Create a custom embed that looks like a span
-            newOps.push({
-                insert: {
-                    'preview-variable': {
-                        name: variable.name,
-                        value: value,
-                        type: variable.type,
-                        required: variable.required
-                    }
-                }
-            });
-        } else {
-            // Keep regular content
-            newOps.push(op);
-        }
-    });
-    
-    return { ops: newOps };
-}
-
       // ========================================
       // VARIABLES GLOBALES
       // ========================================
@@ -486,184 +636,167 @@ function generatePreviewContent() {
       let isContentLoaded = false;
       let documentUUID = null;
       let variableValues = {};
-      // =======================================
-      // NEW
-      // ========================================
-      let isPreviewMode = false;
-      let originalContentB64 = null;
-      let editModeParam = 'yes';
+let isPreviewMode = false;
+let originalContentBackup = null;
+let transformationMap = new Map();
+let targetPreviewMode = false;
 
       // ========================================
       // INICIALIZACIÓN DEL EDITOR
       // ========================================
-      document.addEventListener('DOMContentLoaded', function () {
-        quillEditor = new Quill('#editor', {
-          theme: 'snow',
-          modules: {
-            toolbar: {
-              container: '#toolbar',
-              handlers: {},
-            },
-          },
-          placeholder: 'Escribe tu documento aquí...',
-        });
+document.addEventListener('DOMContentLoaded', function () {
+  quillEditor = new Quill('#editor', {
+    theme: 'snow',
+    modules: {
+      toolbar: {
+        container: '#toolbar',
+        handlers: {},
+      },
+    },
+    placeholder: 'Escribe tu documento aquí...',
+  });
 
-        // Configurar toolbar personalizada
-        const toolbar = quillEditor.getModule('toolbar');
-        toolbar.addHandler('bold', () =>
-          quillEditor.format('bold', !quillEditor.getFormat().bold)
-        );
+  // Configure toolbar
+  const toolbar = quillEditor.getModule('toolbar');
+  toolbar.addHandler('bold', () =>
+    quillEditor.format('bold', !quillEditor.getFormat().bold)
+  );
 
-        // Eventos del editor
-        quillEditor.on('text-change', function (delta, oldDelta, source) {
-          if (source === 'user' && isContentLoaded) {
-            notifyContentChanged();
-          }
-        });
+  // Events del editor
+  quillEditor.on('text-change', function (delta, oldDelta, source) {
+    if (source === 'user' && isContentLoaded) {
+      notifyContentChanged();
+    }
+  });
 
-        // Obtener parámetros de la URL
-        const urlParams = new URLSearchParams(window.location.search);
-        editorId = urlParams.get('id');
+  // Get URL parameters
+  const urlParams = new URLSearchParams(window.location.search);
+  editorId = urlParams.get('id');
+  const base64Content = urlParams.get('content');
+  documentUUID = urlParams.get('uuid');
 
-        const base64Content = urlParams.get('content');
-        // Obtener o generar UUID
-        documentUUID = urlParams.get('uuid');
+  // DETECT EDITOR MODE FROM URL - THIS IS NEW
+  detectEditorModeFromURL();
 
-        //=========================================
-        // NEW
-        //=========================================
-        editModeParam = urlParams.get('editmode') || 'yes';
-        isPreviewMode = editModeParam.toLowerCase() === 'no';
-        
-        // ADD DEBUGGING:
-console.log('=== PREVIEW MODE DEBUG ===');
-console.log('editModeParam:', editModeParam);
-console.log('isPreviewMode:', isPreviewMode);
-console.log('variableValues:', variableValues);
-console.log('============================');
-        
-        console.log('Document UUID:', documentUUID);
-        console.log('Se pao conenido ', base64Content);
-        if (base64Content) {
-          showLoading(true);
-          console.log('llega ', base64Content);
-          window.editorAPI.setContent(base64Content);
-        }
-        // Notificar que el editor está listo
-        notifyEditorReady();
+  console.log('Document UUID:', documentUUID);
+  console.log('Target preview mode:', targetPreviewMode);
 
-        // Escuchar mensajes del padre
-        window.addEventListener('message', handleParentMessage);
-
-        isContentLoaded = true;
-
-        // ================================
-        // NEW
-        //=======================================
-        if (isPreviewMode) {
+  if (base64Content) {
+    showLoading(true);
+    console.log('Setting content:', base64Content);
+    window.editorAPI.setContent(base64Content);
+    
+    // Apply correct mode after content is loaded - THIS IS NEW
     setTimeout(() => {
-        enterPreviewMode();
-    }, 300);
-}
+      applyCorrectModeFromURL();
+      showLoading(false);
+    }, 200);
+  } else {
+    // Apply correct mode immediately if no content to load - THIS IS NEW
+    setTimeout(() => {
+      applyCorrectModeFromURL();
+    }, 100);
+  }
 
-        
-      });
+  // Notify that editor is ready
+  notifyEditorReady();
 
+  // Listen for messages from parent
+  window.addEventListener('message', handleParentMessage);
+
+  isContentLoaded = true;
+});
       // ========================================
       // API PÚBLICA DEL EDITOR
       // ========================================
       window.editorAPI = {
-        insertVariable: function (name, type = 'text', required = false, value = null) {
-    console.log('=== insertVariable API CALLED ===');
-    console.log('Received name:', name);
-    console.log('Received type:', type);
-    console.log('Received required:', required);
-    console.log('Received value:', value);
-          
-          if (!quillEditor) return false;
+window.editorAPI.insertVariable = function (name, type = 'text', required = false, value = null) {
+  console.log('=== insertVariable API CALLED ===');
+  console.log('Received name:', name);
+  console.log('Received type:', type);
+  console.log('Received required:', required);
+  console.log('Received value:', value);
+  console.log('Current preview mode:', isPreviewMode);
 
-          const range = quillEditor.getSelection();
-          const insertIndex = range ? range.index : quillEditor.getLength();
+  if (!quillEditor) return false;
+
+  const range = quillEditor.getSelection();
+  const insertIndex = range ? range.index : quillEditor.getLength();
+
+  try {
+    // Store the value in variableValues AND in the Delta
+    if (value !== null && value !== undefined && value !== '') {
+      variableValues[name.trim()] = value;
+      console.log(`Variable value stored: ${name.trim()} = ${value}`);
+    }
+
+    if (isPreviewMode) {
+      const displayValue = variableValues[name.trim()] || `{{${name.trim()}}}`;
+      quillEditor.insertEmbed(
+        insertIndex,
+        'previewVariable',
+        {
+          name: name.trim(),
+          type: type,
+          required: required,
+          displayValue: displayValue,
+          originalName: name.trim(),
+          value: value // Include value in preview too
+        },
+        Quill.sources.API
+      );
+    } else {
+      // NEW: Include value in the Delta
+      quillEditor.insertEmbed(
+        insertIndex,
+        'variable',
+        {
+          name: name.trim(),
+          type: type,
+          required: required,
+          value: value // NEW: This will be saved in Delta
+        },
+        Quill.sources.API
+      );
+    }
+
+    quillEditor.setSelection(insertIndex + 1);
+    setTimeout(() => animateNewVariable(name), 50);
+    notifyContentChanged();
+
+    return true;
+  } catch (error) {
+    console.error('Error al insertar variable:', error);
+    return false;
+  }
+};
+
+        setContent: function (delta) {
+          if (!quillEditor || !delta) return false;
+
+          showLoading(true);
 
           try {
-            quillEditor.insertEmbed(
-              insertIndex,
-              'variable',
-              {
-                name: name.trim(),
-                type: type,
-                required: required,
-              },
-              Quill.sources.API
-            );
+            isContentLoaded = false;
 
-            quillEditor.setSelection(insertIndex + 1);
+            // Si el contenido viene como Base64, decodificarlo primero
+            const content =
+              typeof delta === 'string' ? decodeBase64(delta) : delta;
+            console.log('Contenido decodificdo ', content);
+            quillEditor.setContents(content);
 
-                    console.log('=== ABOUT TO STORE VALUE ===');
-        console.log('Value check - value !== null:', value !== null);
-        console.log('Value check - value !== undefined:', value !== undefined);
-        console.log('Value check - value !== "":', value !== '');
-        console.log('variableValues before:', variableValues);
-            
-       // ADD THESE LINES - YOU'RE MISSING THIS!
-            
-        if (value !== null && value !== undefined && value !== '') {
-            variableValues[name.trim()] = value;
-            console.log(`Variable value stored: ${name.trim()} = ${value}`);
-          console.log('variableValues after:', variableValues);
-        }else {
-            console.log('❌ Value not stored - failed conditions');
-        }
-            
-            setTimeout(() => animateNewVariable(name), 50);
+            setTimeout(() => {
+              isContentLoaded = true;
+              showLoading(false);
+            }, 100);
 
-            notifyContentChanged();
             return true;
           } catch (error) {
-            console.error('Error al insertar variable:', error);
+            console.error('Error al establecer contenido:', error);
+            showLoading(false);
             return false;
           }
         },
-
-setContent: function (delta) {
-    if (!quillEditor || !delta) return false;
-
-    showLoading(true);
-
-    try {
-        isContentLoaded = false;
-
-        const content = typeof delta === 'string' ? decodeBase64(delta) : delta;
-        console.log('Contenido decodificado:', content);
-        
-        // Extract variable values from loaded content
-        if (content && content.ops) {
-            content.ops.forEach((op) => {
-                if (op.insert && typeof op.insert === 'object' && op.insert.variable) {
-                    const variable = op.insert.variable;
-                    if (variable.value) {
-                        variableValues[variable.name] = variable.value;
-                        console.log(`Loaded variable value: ${variable.name} = ${variable.value}`);
-                    }
-                }
-            });
-        }
-        console.log('Final variableValues after loading:', variableValues);
-
-        quillEditor.setContents(content);
-
-        setTimeout(() => {
-            isContentLoaded = true;
-            showLoading(false);
-        }, 100);
-
-        return true;
-    } catch (error) {
-        console.error('Error al establecer contenido:', error);
-        showLoading(false);
-        return false;
-    }
-},
 
         getContent: function (encode = false) {
           if (!quillEditor) return null;
@@ -675,59 +808,47 @@ setContent: function (delta) {
           return quillEditor ? quillEditor.root.innerHTML : '';
         },
 
-        getVariables: function () {
-          if (!quillEditor) return [];
-
-          const variables = [];
-          const contents = quillEditor.getContents();
-
-          contents.ops.forEach((op) => {
-            if (
-              op.insert &&
-              typeof op.insert === 'object' &&
-              op.insert.variable
-            ) {
-              const variable = op.insert.variable;
-              variables.push({
-                name: variable.name,
-                type: variable.type,
-                required: variable.required,
-                value: variableValues[variable.name] || null 
-            });
-            }
-          });
-
-          return variables;
-        },
-// Add this new method to window.editorAPI
-enhanceContentWithValues: function() {
-    if (!quillEditor) return null;
+window.editorAPI.getVariables = function() {
+  if (!quillEditor) return [];
+  
+  const variables = [];
+  const contents = quillEditor.getContents();
+  
+  contents.ops.forEach((op) => {
+    let variable = null;
     
-    const content = quillEditor.getContents();
-    const enhancedOps = [];
-    
-    content.ops.forEach((op) => {
-        if (op.insert && typeof op.insert === 'object' && op.insert.variable) {
-            // Add the value to the variable object before saving
-            const variable = op.insert.variable;
-            const enhancedVariable = {
-                ...variable,
-                value: variableValues[variable.name] || null
-            };
-            
-            enhancedOps.push({
-                ...op,
-                insert: {
-                    variable: enhancedVariable
-                }
-            });
-        } else {
-            enhancedOps.push(op);
+    if (op.insert && typeof op.insert === 'object') {
+      if (op.insert.variable) {
+        variable = op.insert.variable;
+        // Value is now stored in Delta, but also sync with variableValues
+        if (variable.value) {
+          variableValues[variable.name] = variable.value;
         }
-    });
-    
-    return { ops: enhancedOps };
-},
+      } else if (op.insert.previewVariable) {
+        variable = {
+          name: op.insert.previewVariable.originalName || op.insert.previewVariable.name,
+          type: op.insert.previewVariable.type,
+          required: op.insert.previewVariable.required,
+          value: op.insert.previewVariable.displayValue
+        };
+        // Update variableValues from preview
+        variableValues[variable.name] = op.insert.previewVariable.displayValue;
+      }
+      
+      if (variable) {
+        variables.push({
+          name: variable.name,
+          type: variable.type,
+          required: variable.required,
+          value: variable.value || variableValues[variable.name] || null
+        });
+      }
+    }
+  });
+  
+  return variables;
+};
+
         focus: function () {
           if (quillEditor) {
             quillEditor.focus();
@@ -743,20 +864,19 @@ enhanceContentWithValues: function() {
           }
           return false;
         },
-
-        // ====================================
-        // NEW
-        // ===================================
-        // ADD THESE MISSING METHODS:
-togglePreviewMode: function(enable = null) {
-    const shouldEnable = enable !== null ? enable : !isPreviewMode;
-    return shouldEnable ? enterPreviewMode() : exitPreviewMode();
-},
-
-getPreviewMode: function() {
-    return isPreviewMode;
-},
       };
+
+      // =================================
+      // NEW
+      // ==================================
+      window.editorAPI.getPreviewMode = function() {
+  return isPreviewMode;
+};
+
+window.editorAPI.refreshPreviewMode = refreshPreviewMode;
+window.editorAPI.syncPreviewVariableChanges = syncPreviewVariableChanges;
+window.editorAPI.applyCorrectModeFromURL = applyCorrectModeFromURL;
+
 
       // ========================================
       // FUNCIONES DE COMUNICACIÓN CON EL PADRE
@@ -827,6 +947,29 @@ getPreviewMode: function() {
             }
             break;
 
+            case 'set-variable-values':
+  if (data.values && typeof data.values === 'object') {
+    Object.assign(variableValues, data.values);
+    console.log('Variable values updated from parent:', variableValues);
+    
+    // If in preview mode, refresh to show new values
+    if (isPreviewMode) {
+      window.editorAPI.refreshPreviewMode();
+    }
+    
+    sendMessageToParent('variable-values-updated', {
+      editorId: editorId,
+      uuid: documentUUID,
+      variableValues: variableValues
+    });
+  }
+  break;
+
+case 'apply-url-mode':
+  // Allow parent to trigger mode application
+  window.editorAPI.applyCorrectModeFromURL();
+  break;
+
           case 'get-content':
             sendMessageToParent('content-response', {
               editorId: editorId,
@@ -850,17 +993,25 @@ getPreviewMode: function() {
       // ========================================
       // FUNCIONES INTERNAS
       // ========================================
+      
+      // =============================================
+      // NEW
+      // ============================================
       function animateNewVariable(varName) {
-        const variables = document.querySelectorAll('.ql-variable');
-        variables.forEach((varNode) => {
-          if (varNode.dataset.name === varName) {
-            varNode.classList.add('newly-inserted');
-            setTimeout(() => {
-              varNode.classList.remove('newly-inserted');
-            }, 400);
-          }
-        });
+  const variableSelectors = ['.ql-variable', '.ql-preview-variable'];
+  
+  variableSelectors.forEach(selector => {
+    const variables = document.querySelectorAll(selector);
+    variables.forEach((varNode) => {
+      if (varNode.dataset.name === varName || varNode.dataset.originalName === varName) {
+        varNode.classList.add('newly-inserted');
+        setTimeout(() => {
+          varNode.classList.remove('newly-inserted');
+        }, 400);
       }
+    });
+  });
+}
 
       function showLoading(show) {
         const indicator = document.getElementById('loadingIndicator');
@@ -868,70 +1019,34 @@ getPreviewMode: function() {
       }
 
       // ========================================
-      // MANEJADORES DE BOTONES - modified
+      // MANEJADORES DE BOTONES
       // ========================================
-function handleSave() {
-    console.log('=== SAVING CONTENT ===');
-    let contentToSave;
-    let htmlToSave;
-    
-    if (isPreviewMode && originalContentB64) {
-        // Get the original content and enhance it with current values
-        const originalContent = decodeBase64(originalContentB64);
-        const enhancedContent = enhanceContentWithCurrentValues(originalContent);
-        contentToSave = encodeBase64(enhancedContent);
-        
-        // Get HTML from original
-        const tempContent = quillEditor.getContents();
-        isContentLoaded = false;
-        quillEditor.setContents(originalContent);
-        htmlToSave = quillEditor.root.innerHTML;
-        quillEditor.setContents(tempContent);
-        isContentLoaded = true;
-    } else {
-        // Normal save - enhance current content with values
-        const enhancedContent = window.editorAPI.enhanceContentWithValues();
-        contentToSave = encodeBase64(enhancedContent);
-        htmlToSave = window.editorAPI.getHTML();
-    }
-    
-    const variables = window.editorAPI.getVariables();
+      function handleSave() {
+        const content = window.editorAPI.getContent(true); // Codificado en Base64
+        const html = window.editorAPI.getHTML();
+        const variables = window.editorAPI.getVariables();
 
-    sendMessageToParent('save-requested', {
-        editorId: editorId,
-        uuid: documentUUID,
-        content: contentToSave,
-        html: htmlToSave,
-        variables: variables,
-        timestamp: new Date().toISOString(),
-    });
+        // Enviar datos al padre
+        sendMessageToParent('save-requested', {
+          editorId: editorId,
+          uuid: documentUUID,
+          content: content,
+          html: html,
+          variables: variables,
+          timestamp: new Date().toISOString(),
+        });
 
-    // Visual feedback...
-}
+        // Feedback visual
+        const saveBtn = document.getElementById('saveBtn');
+        const originalText = saveBtn.innerHTML;
+        saveBtn.innerHTML = '✅ Guardado';
+        saveBtn.disabled = true;
 
-// Helper function
-function enhanceContentWithCurrentValues(content) {
-    const enhancedOps = [];
-    
-    content.ops.forEach((op) => {
-        if (op.insert && typeof op.insert === 'object' && op.insert.variable) {
-            const variable = op.insert.variable;
-            const enhancedVariable = {
-                ...variable,
-                value: variableValues[variable.name] || null
-            };
-            
-            enhancedOps.push({
-                ...op,
-                insert: { variable: enhancedVariable }
-            });
-        } else {
-            enhancedOps.push(op);
-        }
-    });
-    
-    return { ops: enhancedOps };
-}
+        setTimeout(() => {
+          saveBtn.innerHTML = originalText;
+          saveBtn.disabled = false;
+        }, 2000);
+      }
 
       function handleDelete() {
         if (confirm('¿Estás seguro de que deseas eliminar este documento?')) {
