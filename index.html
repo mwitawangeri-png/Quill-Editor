@@ -159,6 +159,31 @@
         line-height: 1.6;
       }
 
+      .ql-preview-variable {
+    display: inline-flex;
+    align-items: center;
+    background: linear-gradient(135deg, #fff3cd, #ffeaa7) !important;
+    color: #856404 !important;
+    font-weight: 600 !important;
+    padding: 2px 8px !important;
+    border-radius: 12px !important;
+    margin: 0 2px !important;
+    cursor: default !important;
+    user-select: none !important;
+    border: 1px solid #ffc107 !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+    transition: all 0.2s ease !important;
+    white-space: nowrap !important;
+    font-family: 'Consolas', monospace;
+    font-size: 13px;
+}
+
+.ql-preview-variable:hover {
+    background: linear-gradient(135deg, #ffeaa7, #fdcb6e) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15) !important;
+}
+
       .loading-indicator {
         display: none;
         position: absolute;
@@ -290,6 +315,53 @@
       VariableBlot.className = 'ql-variable';
       Quill.register(VariableBlot);
 
+      // ==========================================
+      // NEW
+      // ==========================================
+      // ========================================
+// PREVIEW VARIABLE BLOT CONFIGURATION
+// ========================================
+class PreviewVariableBlot extends Parchment.Embed {
+    static create(value) {
+        const node = super.create();
+        const varData = value;
+
+        // Configure node as span
+        node.setAttribute('contenteditable', 'false');
+        node.dataset.name = varData.name;
+        node.dataset.type = varData.type;
+        node.dataset.required = varData.required;
+
+        // Add preview-specific styling
+        node.classList.add('ql-preview-variable');
+        if (varData.type !== 'text') node.classList.add(`type-${varData.type}`);
+        if (varData.required) node.classList.add('required');
+
+        // Display the actual value, not the variable name
+        node.textContent = varData.value;
+
+        return node;
+    }
+
+    static value(node) {
+        return {
+            name: node.dataset.name,
+            type: node.dataset.type,
+            required: node.dataset.required === 'true',
+            value: node.textContent
+        };
+    }
+
+    static formats(node) {
+        return this.value(node);
+    }
+}
+
+PreviewVariableBlot.blotName = 'preview-variable';
+PreviewVariableBlot.tagName = 'span';
+PreviewVariableBlot.className = 'ql-preview-variable';
+Quill.register(PreviewVariableBlot);
+
       // ========================================
       // FUNCIONES DE CODIFICACIÓN BASE64
       // ========================================
@@ -330,80 +402,82 @@
           }
         );
       }
-      //===============================================
-      //NEW PREVIEW MODE CONTENT
-      //===============================================
 
-// ========================================
-// SIMPLIFIED PREVIEW MODE FUNCTIONS
+      // =======================================
+      // NEW
+      // =========================================
+
+      // ========================================
+// SIMPLE PREVIEW MODE FUNCTIONS
 // ========================================
 function enterPreviewMode() {
-    console.log('=== ENTERING PREVIEW MODE ===');
+    if (!quillEditor || isPreviewMode) return false;
     
-    if (!quillEditor) return false;
-    
-    // Store current edit content as Base64
+    // Store original content
     originalContentB64 = window.editorAPI.getContent(true);
     
-    // Generate preview content with substituted values
+    // Generate preview content
     const previewContent = generatePreviewContent();
     
-    // Apply preview content to editor
+    // Apply preview content
     isContentLoaded = false;
     quillEditor.setContents(previewContent);
+    quillEditor.disable(); // Disable editing in preview mode
     isContentLoaded = true;
     
     isPreviewMode = true;
-    console.log('=== PREVIEW MODE ACTIVATED ===');
     return true;
 }
 
 function exitPreviewMode() {
-    console.log('=== EXITING PREVIEW MODE ===');
+    if (!originalContentB64 || !isPreviewMode) return false;
     
-    if (!isPreviewMode || !originalContentB64) return false;
-    
-    // Restore original content from Base64
+    // Restore original content
     const originalContent = decodeBase64(originalContentB64);
     
     isContentLoaded = false;
     quillEditor.setContents(originalContent);
+    quillEditor.enable(); // Re-enable editing
     isContentLoaded = true;
     
     isPreviewMode = false;
+    originalContentB64 = null;
     return true;
 }
 
 function generatePreviewContent() {
+    console.log('=== GENERATING PREVIEW CONTENT ===');
     const currentContent = quillEditor.getContents();
     const newOps = [];
     
     currentContent.ops.forEach((op) => {
         if (op.insert && typeof op.insert === 'object' && op.insert.variable) {
-            // Replace variable with its value
+            // Replace variable with its value as a custom embed (not regular text)
             const variable = op.insert.variable;
             const value = variableValues[variable.name] || `{{${variable.name}}}`;
             
             console.log(`Replacing "${variable.name}" with "${value}"`);
             
-            // Create styled text instead of variable embed
+            // Create a custom embed that looks like a span
             newOps.push({
-                insert: value,
-                attributes: {
-                    background: '#fff3cd',
-                    color: '#856404',
-                    'font-weight': 'bold'
+                insert: {
+                    'preview-variable': {
+                        name: variable.name,
+                        value: value,
+                        type: variable.type,
+                        required: variable.required
+                    }
                 }
             });
         } else {
-            // Keep regular content as-is
+            // Keep regular content
             newOps.push(op);
         }
     });
     
     return { ops: newOps };
 }
-      
+
       // ========================================
       // VARIABLES GLOBALES
       // ========================================
@@ -412,17 +486,13 @@ function generatePreviewContent() {
       let isContentLoaded = false;
       let documentUUID = null;
       let variableValues = {};
+      // =======================================
+      // NEW
+      // ========================================
+      let isPreviewMode = false;
+      let originalContentB64 = null;
+      let editModeParam = 'yes';
 
-      //==========================================
-      //NEW VARIABLES
-      //==========================================
-
-// Add these after the existing global variables
-let isPreviewMode = false;
-let originalContentB64 = null;  // Base64 of edit mode content
-let previewContentB64 = null;   // Base64 of preview mode content
-let editModeParam = 'yes';
-      
       // ========================================
       // INICIALIZACIÓN DEL EDITOR
       // ========================================
@@ -458,11 +528,13 @@ let editModeParam = 'yes';
         const base64Content = urlParams.get('content');
         // Obtener o generar UUID
         documentUUID = urlParams.get('uuid');
-editModeParam = urlParams.get('editmode') || 'yes';
-isPreviewMode = editModeParam.toLowerCase() === 'no';
 
-console.log('editmode param:', editModeParam);
-console.log('isPreviewMode:', isPreviewMode);
+        //=========================================
+        // NEW
+        //=========================================
+        editModeParam = urlParams.get('editmode') || 'yes';
+        isPreviewMode = editModeParam.toLowerCase() === 'no';
+
         
         console.log('Document UUID:', documentUUID);
         console.log('Se pao conenido ', base64Content);
@@ -479,14 +551,14 @@ console.log('isPreviewMode:', isPreviewMode);
 
         isContentLoaded = true;
 
-        // =====================================
-        // PREVIEW MODE LISTENER
-        // =====================================
-                if (isPreviewMode) {
-            setTimeout(() => {
-                enterPreviewMode();
-            }, 200);
-        }
+        // ================================
+        // NEW
+        //=======================================
+        if (isPreviewMode) {
+    setTimeout(() => {
+        enterPreviewMode();
+    }, 300);
+}
 
         
       });
@@ -540,15 +612,6 @@ console.log('isPreviewMode:', isPreviewMode);
             setTimeout(() => animateNewVariable(name), 50);
 
             notifyContentChanged();
-            
-            // Auto-refresh preview if in preview mode  <-- ADD THE NEW CODE HERE
-            if (isPreviewMode && value !== null && value !== undefined && value !== '') {
-                console.log('🔄 Auto-refreshing preview mode...');
-                setTimeout(() => {
-                    window.editorAPI.refreshPreviewMode();
-                }, 100);
-            }
-        
             return true;
           } catch (error) {
             console.error('Error al insertar variable:', error);
@@ -633,34 +696,6 @@ console.log('isPreviewMode:', isPreviewMode);
           }
           return false;
         },
-// Add these methods after clear():
-togglePreviewMode: function(enable = null) {
-    const shouldEnable = enable !== null ? enable : !isPreviewMode;
-    return shouldEnable ? enterPreviewMode() : exitPreviewMode();
-},
-
-enterPreviewMode: function() {
-    return enterPreviewMode();
-},
-
-exitPreviewMode: function() {
-    return exitPreviewMode();
-},
-
-getPreviewMode: function() {
-    return isPreviewMode;
-},
-
-refreshPreviewMode: function() {
-    if (isPreviewMode) {
-        exitPreviewMode();
-        setTimeout(() => {
-            enterPreviewMode();
-        }, 50);
-    }
-    return isPreviewMode;
-},
-        
       };
 
       // ========================================
@@ -773,54 +808,43 @@ refreshPreviewMode: function() {
       }
 
       // ========================================
-      // MANEJADORES DE BOTONES
+      // MANEJADORES DE BOTONES - modified
       // ========================================
 function handleSave() {
     console.log('=== SAVING CONTENT ===');
-    console.log('Current isPreviewMode:', isPreviewMode);
-    
     let contentToSave;
     let htmlToSave;
     
     if (isPreviewMode && originalContentB64) {
-        // We're in preview mode - save the original variable content
-        console.log('📝 Saving original variable content (not preview content)');
-        contentToSave = originalContentB64; // Already Base64 encoded
+        // Save original variable content, not preview
+        console.log('Saving original variable content');
+        contentToSave = originalContentB64;
         
-        // For HTML, we need to temporarily restore original content
-        const currentPreviewContent = quillEditor.getContents();
+        // Get HTML from original content
         const originalContent = decodeBase64(originalContentB64);
-        
-        // Temporarily restore original to get proper HTML
+        const tempContent = quillEditor.getContents();
         quillEditor.setContents(originalContent);
         htmlToSave = quillEditor.root.innerHTML;
-        
-        // Restore preview content
-        quillEditor.setContents(currentPreviewContent);
+        quillEditor.setContents(tempContent);
     } else {
-        // We're in edit mode - save current content normally
-        console.log('📝 Saving current edit content');
-        contentToSave = window.editorAPI.getContent(true); // Base64 encoded
+        // Normal save
+        console.log('Saving current edit content');
+        contentToSave = window.editorAPI.getContent(true);
         htmlToSave = window.editorAPI.getHTML();
     }
     
     const variables = window.editorAPI.getVariables();
-    
-    console.log('📝 Content being saved (Base64):', contentToSave);
-    console.log('📝 Variables being saved:', variables);
 
-    // Enviar datos al padre
     sendMessageToParent('save-requested', {
         editorId: editorId,
         uuid: documentUUID,
         content: contentToSave,
         html: htmlToSave,
         variables: variables,
-        isPreviewMode: isPreviewMode, // Include current mode for reference
         timestamp: new Date().toISOString(),
     });
 
-    // Feedback visual
+    // Visual feedback
     const saveBtn = document.getElementById('saveBtn');
     const originalText = saveBtn.innerHTML;
     saveBtn.innerHTML = '✅ Guardado';
