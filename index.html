@@ -534,7 +534,13 @@ function generatePreviewContent() {
         //=========================================
         editModeParam = urlParams.get('editmode') || 'yes';
         isPreviewMode = editModeParam.toLowerCase() === 'no';
-
+        
+        // ADD DEBUGGING:
+console.log('=== PREVIEW MODE DEBUG ===');
+console.log('editModeParam:', editModeParam);
+console.log('isPreviewMode:', isPreviewMode);
+console.log('variableValues:', variableValues);
+console.log('============================');
         
         console.log('Document UUID:', documentUUID);
         console.log('Se pao conenido ', base64Content);
@@ -696,6 +702,19 @@ function generatePreviewContent() {
           }
           return false;
         },
+
+        // ====================================
+        // NEW
+        // ===================================
+        // ADD THESE MISSING METHODS:
+togglePreviewMode: function(enable = null) {
+    const shouldEnable = enable !== null ? enable : !isPreviewMode;
+    return shouldEnable ? enterPreviewMode() : exitPreviewMode();
+},
+
+getPreviewMode: function() {
+    return isPreviewMode;
+},
       };
 
       // ========================================
