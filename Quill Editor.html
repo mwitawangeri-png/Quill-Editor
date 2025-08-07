@@ -337,6 +337,7 @@
       let editorId = null;
       let isContentLoaded = false;
       let documentUUID = null;
+      let variableValues = {};
 
       // ========================================
       // INICIALIZACIÓN DEL EDITOR
@@ -412,6 +413,13 @@
             );
 
             quillEditor.setSelection(insertIndex + 1);
+            
+       // ADD THESE LINES - YOU'RE MISSING THIS!
+        if (value !== null && value !== undefined && value !== '') {
+            variableValues[name.trim()] = value;
+            console.log(`Variable value stored: ${name.trim()} = ${value}`);
+        }
+            
             setTimeout(() => animateNewVariable(name), 50);
 
             notifyContentChanged();
@@ -471,7 +479,13 @@
               typeof op.insert === 'object' &&
               op.insert.variable
             ) {
-              variables.push(op.insert.variable);
+              const variable = op.insert.variable;
+              variables.push({
+                name: variable.name,
+                type: variable.type,
+                required: variable.required,
+                value: variableValues[variable.name] || null 
+            });
             }
           });
 
