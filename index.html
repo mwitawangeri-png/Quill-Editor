@@ -367,7 +367,7 @@
         originalContent = quillEditor.getContents();
         console.log('Original content stored:', originalContent);
         
-        // Get current variables and their values
+        // Get current variables and their values 
         const variables = window.editorAPI.getVariables();
         console.log('Variables found:', variables);
         
@@ -375,7 +375,16 @@
         variablePositionMap.clear();
         
         // Process content for substitution
-        const transformedContent = transformContentToPreview(originalContent, variables);
+        // With this enhanced version:
+console.log('🔍 About to transform content...');
+console.log('🔍 Original content:', originalContent);
+console.log('🔍 Variables to process:', variables);
+console.log('🔍 Current variableValues object:', variableValues);
+
+const transformedContent = transformContentToPreview(originalContent, variables);
+
+console.log('🔍 Transformation result:', transformedContent);
+console.log('🔍 Are they different?', JSON.stringify(originalContent) !== JSON.stringify(transformedContent));
         console.log('Transformed content:', transformedContent);
         
         // Apply transformed content
@@ -404,56 +413,77 @@
         return true;
       }
 
-      function transformContentToPreview(content, variables) {
-        console.log('=== TRANSFORMING CONTENT ===');
-        const newOps = [];
-        let positionOffset = 0;
+function transformContentToPreview(content, variables) {
+    console.log('=== TRANSFORMING CONTENT (ENHANCED DEBUG) ===');
+    console.log('Content received:', content);
+    console.log('Variables received:', variables);
+    console.log('Current variableValues:', variableValues);
+    
+    const newOps = [];
+    let positionOffset = 0;
+    
+    content.ops.forEach((op, index) => {
+        console.log(`Processing op ${index}:`, op);
+        console.log('Op insert type:', typeof op.insert);
+        console.log('Is object:', typeof op.insert === 'object');
         
-        content.ops.forEach((op, index) => {
-          console.log('Processing op:', op);
-          
-          if (op.insert && typeof op.insert === 'object' && op.insert.variable) {
+        if (op.insert && typeof op.insert === 'object') {
+            console.log('Object keys:', Object.keys(op.insert));
+            console.log('Has variable property:', 'variable' in op.insert);
+            console.log('Variable property value:', op.insert.variable);
+        }
+        
+        if (op.insert && typeof op.insert === 'object' && op.insert.variable) {
             // This is a variable - replace with its value
             const variable = op.insert.variable;
             const value = variableValues[variable.name] || `{{${variable.name}}}`;
             
-            console.log(`Variable found: ${variable.name} = ${value}`);
+            console.log(`🎯 VARIABLE FOUND!`);
+            console.log(`   - Variable name: "${variable.name}"`);
+            console.log(`   - Looking up in variableValues["${variable.name}"]`);
+            console.log(`   - Found value: "${value}"`);
+            console.log(`   - Variable object:`, variable);
             
             // Store position mapping
             variablePositionMap.set(positionOffset, {
-              name: variable.name,
-              type: variable.type,
-              required: variable.required,
-              originalLength: 1,
-              substitutedLength: value.length,
-              substitutedValue: value
+                name: variable.name,
+                type: variable.type,
+                required: variable.required,
+                originalLength: 1,
+                substitutedLength: value.length,
+                substitutedValue: value
             });
             
             // Create text operation with special styling
-            newOps.push({
-              insert: value,
-              attributes: {
-                'substituted-variable': variable.name,
-                background: '#fff3cd',
-                color: '#856404'
-              }
-            });
+            const newOp = {
+                insert: value,
+                attributes: {
+                    'substituted-variable': variable.name,
+                    background: '#fff3cd',
+                    color: '#856404'
+                }
+            };
+            
+            console.log(`   - Created new op:`, newOp);
+            newOps.push(newOp);
             
             positionOffset += value.length;
-          } else {
+        } else {
+            console.log(`📝 Regular content - keeping as-is`);
             // Regular content - keep as is
             newOps.push(op);
             if (typeof op.insert === 'string') {
-              positionOffset += op.insert.length;
+                positionOffset += op.insert.length;
             } else {
-              positionOffset += 1; // Non-text inserts
+                positionOffset += 1; // Non-text inserts
             }
-          }
-        });
-        
-        console.log('New ops created:', newOps);
-        return { ops: newOps };
-      }
+        }
+    });
+    
+    console.log('📋 Final new ops created:', newOps);
+    console.log('📋 Comparison - Original ops:', content.ops);
+    return { ops: newOps };
+}
 
       function notifyModeChanged() {
         sendMessageToParent('mode-changed', {
