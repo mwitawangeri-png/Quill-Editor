@@ -633,17 +633,15 @@ setContent: function (delta) {
     try {
         isContentLoaded = false;
 
-        // Si el contenido viene como Base64, decodificarlo primero
         const content = typeof delta === 'string' ? decodeBase64(delta) : delta;
-        console.log('Contenido decodificdo ', content);
+        console.log('Contenido decodificado:', content);
         
-        // 🔥 NEW: Extract variable values from content
+        // Extract variable values from loaded content
         if (content && content.ops) {
             content.ops.forEach((op) => {
                 if (op.insert && typeof op.insert === 'object' && op.insert.variable) {
                     const variable = op.insert.variable;
-                    // Check if the variable has a stored value (from previous saves)
-                    if (variable.value && variable.value !== null && variable.value !== '') {
+                    if (variable.value) {
                         variableValues[variable.name] = variable.value;
                         console.log(`Loaded variable value: ${variable.name} = ${variable.value}`);
                     }
@@ -701,7 +699,35 @@ setContent: function (delta) {
 
           return variables;
         },
-
+// Add this new method to window.editorAPI
+enhanceContentWithValues: function() {
+    if (!quillEditor) return null;
+    
+    const content = quillEditor.getContents();
+    const enhancedOps = [];
+    
+    content.ops.forEach((op) => {
+        if (op.insert && typeof op.insert === 'object' && op.insert.variable) {
+            // Add the value to the variable object before saving
+            const variable = op.insert.variable;
+            const enhancedVariable = {
+                ...variable,
+                value: variableValues[variable.name] || null
+            };
+            
+            enhancedOps.push({
+                ...op,
+                insert: {
+                    variable: enhancedVariable
+                }
+            });
+        } else {
+            enhancedOps.push(op);
+        }
+    });
+    
+    return { ops: enhancedOps };
+},
         focus: function () {
           if (quillEditor) {
             quillEditor.focus();
@@ -846,47 +872,30 @@ getPreviewMode: function() {
       // ========================================
 function handleSave() {
     console.log('=== SAVING CONTENT ===');
-    console.log('Current isPreviewMode:', isPreviewMode);
-    
     let contentToSave;
     let htmlToSave;
     
     if (isPreviewMode && originalContentB64) {
-        // Save original variable content, not preview
-        console.log('Saving original variable content (Base64)');
-        contentToSave = originalContentB64; // This is already Base64
-        
-        // Get HTML from original content
+        // Get the original content and enhance it with current values
         const originalContent = decodeBase64(originalContentB64);
-        if (originalContent) {
-            const tempContent = quillEditor.getContents();
-            isContentLoaded = false;
-            quillEditor.setContents(originalContent);
-            htmlToSave = quillEditor.root.innerHTML;
-            quillEditor.setContents(tempContent);
-            isContentLoaded = true;
-        } else {
-            htmlToSave = quillEditor.root.innerHTML; // Fallback
-        }
-    } else {
-        // Normal save - ensure we get Base64 string
-        console.log('Saving current edit content');
-        const currentContent = quillEditor.getContents();
-        contentToSave = encodeBase64(currentContent); // Explicitly encode
+        const enhancedContent = enhanceContentWithCurrentValues(originalContent);
+        contentToSave = encodeBase64(enhancedContent);
+        
+        // Get HTML from original
+        const tempContent = quillEditor.getContents();
+        isContentLoaded = false;
+        quillEditor.setContents(originalContent);
         htmlToSave = quillEditor.root.innerHTML;
+        quillEditor.setContents(tempContent);
+        isContentLoaded = true;
+    } else {
+        // Normal save - enhance current content with values
+        const enhancedContent = window.editorAPI.enhanceContentWithValues();
+        contentToSave = encodeBase64(enhancedContent);
+        htmlToSave = window.editorAPI.getHTML();
     }
     
-    // Get variables with their current values
     const variables = window.editorAPI.getVariables();
-    
-    console.log('Content to save (should be Base64 string):', typeof contentToSave, contentToSave);
-    console.log('Variables to save:', variables);
-
-    // Ensure contentToSave is a string
-    if (typeof contentToSave !== 'string') {
-        console.error('❌ contentToSave is not a string!', typeof contentToSave, contentToSave);
-        contentToSave = encodeBase64(quillEditor.getContents()); // Emergency fallback
-    }
 
     sendMessageToParent('save-requested', {
         editorId: editorId,
@@ -897,16 +906,31 @@ function handleSave() {
         timestamp: new Date().toISOString(),
     });
 
-    // Visual feedback
-    const saveBtn = document.getElementById('saveBtn');
-    const originalText = saveBtn.innerHTML;
-    saveBtn.innerHTML = '✅ Guardado';
-    saveBtn.disabled = true;
+    // Visual feedback...
+}
 
-    setTimeout(() => {
-        saveBtn.innerHTML = originalText;
-        saveBtn.disabled = false;
-    }, 2000);
+// Helper function
+function enhanceContentWithCurrentValues(content) {
+    const enhancedOps = [];
+    
+    content.ops.forEach((op) => {
+        if (op.insert && typeof op.insert === 'object' && op.insert.variable) {
+            const variable = op.insert.variable;
+            const enhancedVariable = {
+                ...variable,
+                value: variableValues[variable.name] || null
+            };
+            
+            enhancedOps.push({
+                ...op,
+                insert: { variable: enhancedVariable }
+            });
+        } else {
+            enhancedOps.push(op);
+        }
+    });
+    
+    return { ops: enhancedOps };
 }
 
       function handleDelete() {
