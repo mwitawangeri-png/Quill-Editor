@@ -526,7 +526,13 @@ if (isPreviewMode) {
         enterPreviewMode();
     }, 200);
 }
-          
+          // Add this debugging code after the URL parameter extraction
+console.log('=== URL PARAMETER DEBUG ===');
+console.log('Full URL:', window.location.href);
+console.log('Search params:', window.location.search);
+console.log('editmode param:', editModeParam);
+console.log('isPreviewMode:', isPreviewMode);
+console.log('================================');
         
       });
 
