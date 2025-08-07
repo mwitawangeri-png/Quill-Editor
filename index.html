@@ -158,72 +158,74 @@
         font-size: 16px;
         line-height: 1.6;
       }
+/* preview styling*/
+      
+.ql-preview-variable {
+  display: inline-flex;
+  align-items: center;
+  background: linear-gradient(135deg, #e8f5e8, #c8e6c9) !important; /* Keep green color */
+  color: #2e7d32 !important;
+  font-weight: 600 !important; /* Match edit mode font weight */
+  padding: 2px 8px !important;
+  border-radius: 12px !important; /* Match edit mode border radius */
+  margin: 0 2px !important; /* Match edit mode margin */
+  cursor: default !important;
+  user-select: none !important;
+  border: 1px solid #4caf50 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important; /* Match edit mode shadow */
+  transition: all 0.2s ease !important;
+  white-space: nowrap !important;
+  font-family: 'Consolas', monospace; /* Match edit mode font family */
+  font-size: 13px; /* Match edit mode font size */
+}
 
-      /* Preview Variable Styling */
-      .ql-preview-variable {
-        display: inline-flex;
-        align-items: center;
-        background: linear-gradient(135deg, #e8f5e8, #c8e6c9) !important;
-        color: #2e7d32 !important;
-        font-weight: 500 !important;
-        padding: 2px 8px !important;
-        border-radius: 4px !important;
-        margin: 0 1px !important;
-        cursor: default !important;
-        user-select: none !important;
-        border: 1px solid #4caf50 !important;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
-        transition: all 0.2s ease !important;
-        white-space: nowrap !important;
-        font-family: inherit;
-        font-size: inherit;
-      }
+.ql-preview-variable:hover {
+  background: linear-gradient(135deg, #c8e6c9, #a5d6a7) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15) !important; /* Match edit mode hover shadow */
+}
 
-      .ql-preview-variable:hover {
-        background: linear-gradient(135deg, #c8e6c9, #a5d6a7) !important;
-        transform: translateY(-1px) !important;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15) !important;
-      }
+.ql-preview-variable.type-number {
+  background: linear-gradient(135deg, #e8f5e8, #c8e6c9) !important; /* Keep consistent green */
+  border-color: #4caf50 !important;
+  color: #2e7d32 !important;
+}
 
-      .ql-preview-variable.type-number {
-        background: linear-gradient(135deg, #fff8e1, #ffecb3) !important;
-        border-color: #ffc107 !important;
-        color: #f57c00 !important;
-      }
+.ql-preview-variable.type-date {
+  background: linear-gradient(135deg, #e8f5e8, #c8e6c9) !important; /* Keep consistent green */
+  border-color: #4caf50 !important;
+  color: #2e7d32 !important;
+}
 
-      .ql-preview-variable.type-date {
-        background: linear-gradient(135deg, #f3e5f5, #e1bee7) !important;
-        border-color: #ab47bc !important;
-        color: #6a1b9a !important;
-      }
+.ql-preview-variable.required {
+  background: linear-gradient(135deg, #ffebee, #ffcdd2) !important;
+  border-color: #f44336 !important;
+  color: #c62828 !important;
+}
 
-      .ql-preview-variable.required {
-        background: linear-gradient(135deg, #ffebee, #ffcdd2) !important;
-        border-color: #f44336 !important;
-        color: #c62828 !important;
-      }
+.ql-preview-variable.required::after {
+  content: ' *';
+  color: #d32f2f;
+  font-weight: bold;
+}
 
-      .ql-preview-variable.required::after {
-        content: ' *';
-        color: #d32f2f;
-        font-weight: bold;
-      }
+/* Remove the green container border in preview mode */
+.editor-container.preview-mode {
+  /* Remove border styling */
+  border: none;
+  border-radius: 0;
+}
 
-      /* Preview Mode Container Styling */
-      .editor-container.preview-mode {
-        border: 2px solid #4caf50;
-        border-radius: 6px;
-      }
+.editor-container.preview-mode .editor-toolbar {
+  /* Remove green background from toolbar */
+  background: inherit;
+  border-bottom-color: #ba3f3f; /* Keep original border color */
+}
 
-      .editor-container.preview-mode .editor-toolbar {
-        background: #e8f5e8;
-        border-bottom-color: #4caf50;
-      }
+/* Animation for newly inserted variables */
+.ql-preview-variable.newly-inserted {
+  animation: variableInsert 0.4s ease-out;
 
-      /* Animation for newly inserted variables */
-      .ql-preview-variable.newly-inserted {
-        animation: variableInsert 0.4s ease-out;
-      }
 
       .loading-indicator {
         display: none;
@@ -613,11 +615,6 @@ function detectEditorModeFromURL() {
         const editorContainer = document.querySelector('.editor-container');
         if (editorContainer) {
           editorContainer.classList.toggle('preview-mode', isPreviewMode);
-        }
-        
-        const toolbar = document.querySelector('.editor-toolbar');
-        if (toolbar) {
-          toolbar.style.display = isPreviewMode ? 'none' : 'flex';
         }
         
         const saveBtn = document.getElementById('saveBtn');
