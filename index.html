@@ -100,23 +100,6 @@
         font-size: 13px;
       }
 
-      /* Styling for substituted variables in preview mode */
-      .ql-editor [substituted-variable] {
-        background: linear-gradient(135deg, #fff3cd, #ffeaa7) !important;
-        padding: 2px 6px !important;
-        border-radius: 4px !important;
-        border: 1px solid #ffc107 !important;
-        font-weight: 500 !important;
-        cursor: pointer !important;
-        transition: all 0.2s ease !important;
-      }
-
-      .ql-editor [substituted-variable]:hover {
-        background: linear-gradient(135deg, #ffeaa7, #fdcb6e) !important;
-        transform: translateY(-1px) !important;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
-      }
-
       .ql-variable:hover {
         background: linear-gradient(135deg, #bbdefb, #90caf9) !important;
         transform: translateY(-1px) !important;
@@ -349,152 +332,6 @@
       }
 
       // ========================================
-      // PREVIEW MODE FUNCTIONS
-      // ========================================
-      function enterPreviewMode() {
-        console.log('=== ENTERING PREVIEW MODE ===');
-        if (isPreviewMode && originalContent) {
-          console.log('Already in preview mode, skipping');
-          return false;
-        }
-        
-        if (!quillEditor) {
-          console.log('No editor found');
-          return false;
-        }
-        
-        // Store original content
-        originalContent = quillEditor.getContents();
-        console.log('Original content stored:', originalContent);
-        
-        // Get current variables and their values 
-        const variables = window.editorAPI.getVariables();
-        console.log('Variables found:', variables);
-        
-        // Create transformation map
-        variablePositionMap.clear();
-        
-        // Process content for substitution
-        // With this enhanced version:
-console.log('🔍 About to transform content...');
-console.log('🔍 Original content:', originalContent);
-console.log('🔍 Variables to process:', variables);
-console.log('🔍 Current variableValues object:', variableValues);
-
-const transformedContent = transformContentToPreview(originalContent, variables);
-
-console.log('🔍 Transformation result:', transformedContent);
-console.log('🔍 Are they different?', JSON.stringify(originalContent) !== JSON.stringify(transformedContent));
-        console.log('Transformed content:', transformedContent);
-        
-        // Apply transformed content
-        isContentLoaded = false; // Prevent change notifications
-        quillEditor.setContents(transformedContent);
-        isContentLoaded = true;
-        
-        isPreviewMode = true;
-        notifyModeChanged();
-        console.log('=== PREVIEW MODE ACTIVATED ===');
-        return true;
-      }
-
-      function exitPreviewMode() {
-        if (!isPreviewMode || !quillEditor || !originalContent) return false;
-        
-        // Restore original content with variables
-        isContentLoaded = false; // Prevent change notifications
-        quillEditor.setContents(originalContent);
-        isContentLoaded = true;
-        
-        isPreviewMode = false;
-        originalContent = null;
-        variablePositionMap.clear();
-        notifyModeChanged();
-        return true;
-      }
-
-function transformContentToPreview(content, variables) {
-    console.log('=== TRANSFORMING CONTENT (ENHANCED DEBUG) ===');
-    console.log('Content received:', content);
-    console.log('Variables received:', variables);
-    console.log('Current variableValues:', variableValues);
-    
-    const newOps = [];
-    let positionOffset = 0;
-    
-    content.ops.forEach((op, index) => {
-        console.log(`Processing op ${index}:`, op);
-        console.log('Op insert type:', typeof op.insert);
-        console.log('Is object:', typeof op.insert === 'object');
-        
-        if (op.insert && typeof op.insert === 'object') {
-            console.log('Object keys:', Object.keys(op.insert));
-            console.log('Has variable property:', 'variable' in op.insert);
-            console.log('Variable property value:', op.insert.variable);
-        }
-        
-        if (op.insert && typeof op.insert === 'object' && op.insert.variable) {
-            // This is a variable - replace with its value
-            const variable = op.insert.variable;
-            const value = variableValues[variable.name] || `{{${variable.name}}}`;
-            
-            console.log(`🎯 VARIABLE FOUND!`);
-            console.log(`   - Variable name: "${variable.name}"`);
-            console.log(`   - Looking up in variableValues["${variable.name}"]`);
-            console.log(`   - Found value: "${value}"`);
-            console.log(`   - Variable object:`, variable);
-            
-            // Store position mapping
-            variablePositionMap.set(positionOffset, {
-                name: variable.name,
-                type: variable.type,
-                required: variable.required,
-                originalLength: 1,
-                substitutedLength: value.length,
-                substitutedValue: value
-            });
-            
-            // Create text operation with special styling
-            const newOp = {
-                insert: value,
-                attributes: {
-                    'substituted-variable': variable.name,
-                    background: '#fff3cd',
-                    color: '#856404'
-                }
-            };
-            
-            console.log(`   - Created new op:`, newOp);
-            newOps.push(newOp);
-            
-            positionOffset += value.length;
-        } else {
-            console.log(`📝 Regular content - keeping as-is`);
-            // Regular content - keep as is
-            newOps.push(op);
-            if (typeof op.insert === 'string') {
-                positionOffset += op.insert.length;
-            } else {
-                positionOffset += 1; // Non-text inserts
-            }
-        }
-    });
-    
-    console.log('📋 Final new ops created:', newOps);
-    console.log('📋 Comparison - Original ops:', content.ops);
-    return { ops: newOps };
-}
-
-      function notifyModeChanged() {
-        sendMessageToParent('mode-changed', {
-          editorId: editorId,
-          uuid: documentUUID,
-          isPreviewMode: isPreviewMode,
-          editModeParam: editModeParam
-        });
-      }
-
-      // ========================================
       // VARIABLES GLOBALES
       // ========================================
       let quillEditor;
@@ -502,11 +339,6 @@ function transformContentToPreview(content, variables) {
       let isContentLoaded = false;
       let documentUUID = null;
       let variableValues = {};
-      // Add these to the existing global variables section    
-      let isPreviewMode = false;
-      let originalContent = null;
-      let variablePositionMap = new Map();
-      let editModeParam = 'yes'; // Default to edit mode
 
       // ========================================
       // INICIALIZACIÓN DEL EDITOR
@@ -539,29 +371,19 @@ function transformContentToPreview(content, variables) {
         // Obtener parámetros de la URL
         const urlParams = new URLSearchParams(window.location.search);
         editorId = urlParams.get('id');
+
         const base64Content = urlParams.get('content');
         // Obtener o generar UUID
         documentUUID = urlParams.get('uuid');
-        editModeParam = urlParams.get('editmode') || 'yes';
-        isPreviewMode = editModeParam.toLowerCase() === 'no';
 
-        // Debugging code
-        console.log('=== URL PARAMETER DEBUG ===');
-        console.log('Full URL:', window.location.href);
-        console.log('Search params:', window.location.search);
-        console.log('editmode param:', editModeParam);
-        console.log('isPreviewMode:', isPreviewMode);
-        console.log('================================');
         
         console.log('Document UUID:', documentUUID);
         console.log('Se pao conenido ', base64Content);
-        
         if (base64Content) {
           showLoading(true);
           console.log('llega ', base64Content);
           window.editorAPI.setContent(base64Content);
         }
-        
         // Notificar que el editor está listo
         notifyEditorReady();
 
@@ -569,14 +391,6 @@ function transformContentToPreview(content, variables) {
         window.addEventListener('message', handleParentMessage);
 
         isContentLoaded = true;
-
-        // Initialize preview mode based on parameter
-        if (isPreviewMode) {
-          // Wait a bit for content to load, then enter preview mode
-          setTimeout(() => {
-            enterPreviewMode();
-          }, 200);
-        }
       });
 
       // ========================================
@@ -584,11 +398,11 @@ function transformContentToPreview(content, variables) {
       // ========================================
       window.editorAPI = {
         insertVariable: function (name, type = 'text', required = false, value = null) {
-          console.log('=== insertVariable API CALLED ===');
-          console.log('Received name:', name);
-          console.log('Received type:', type);
-          console.log('Received required:', required);
-          console.log('Received value:', value);
+    console.log('=== insertVariable API CALLED ===');
+    console.log('Received name:', name);
+    console.log('Received type:', type);
+    console.log('Received required:', required);
+    console.log('Received value:', value);
           
           if (!quillEditor) return false;
 
@@ -609,35 +423,25 @@ function transformContentToPreview(content, variables) {
 
             quillEditor.setSelection(insertIndex + 1);
 
-            console.log('=== ABOUT TO STORE VALUE ===');
-            console.log('Value check - value !== null:', value !== null);
-            console.log('Value check - value !== undefined:', value !== undefined);
-            console.log('Value check - value !== "":', value !== '');
-            console.log('variableValues before:', variableValues);
+                    console.log('=== ABOUT TO STORE VALUE ===');
+        console.log('Value check - value !== null:', value !== null);
+        console.log('Value check - value !== undefined:', value !== undefined);
+        console.log('Value check - value !== "":', value !== '');
+        console.log('variableValues before:', variableValues);
             
-            // ADD THESE LINES - YOU'RE MISSING THIS!
-            if (value !== null && value !== undefined && value !== '') {
-              variableValues[name.trim()] = value;
-              console.log(`Variable value stored: ${name.trim()} = ${value}`);
-              console.log('variableValues after:', variableValues);
-            } else {
-              console.log('❌ Value not stored - failed conditions');
-            }
+       // ADD THESE LINES - YOU'RE MISSING THIS!
+            
+        if (value !== null && value !== undefined && value !== '') {
+            variableValues[name.trim()] = value;
+            console.log(`Variable value stored: ${name.trim()} = ${value}`);
+          console.log('variableValues after:', variableValues);
+        }else {
+            console.log('❌ Value not stored - failed conditions');
+        }
             
             setTimeout(() => animateNewVariable(name), 50);
 
             notifyContentChanged();
-            
-        // 🔥 ADD THIS NEW CODE - Refresh preview mode if active
-        console.log('🔄 Checking if preview mode needs refresh...');
-        console.log('🔄 Current isPreviewMode:', isPreviewMode);
-        if (isPreviewMode) {
-            console.log('🔄 Refreshing preview mode after variable insertion...');
-            setTimeout(() => {
-                window.editorAPI.refreshPreviewMode();
-            }, 100); // Small delay to ensure DOM is updated
-        }
-            
             return true;
           } catch (error) {
             console.error('Error al insertar variable:', error);
@@ -700,7 +504,7 @@ function transformContentToPreview(content, variables) {
                 type: variable.type,
                 required: variable.required,
                 value: variableValues[variable.name] || null 
-              });
+            });
             }
           });
 
@@ -722,39 +526,6 @@ function transformContentToPreview(content, variables) {
           }
           return false;
         },
-
-        // New preview mode methods
-        togglePreviewMode: function(enable = null) {
-          const shouldEnable = enable !== null ? enable : !isPreviewMode;
-          return shouldEnable ? enterPreviewMode() : exitPreviewMode();
-        },
-
-        enterPreviewMode: function() {
-          return enterPreviewMode();
-        },
-
-        exitPreviewMode: function() {
-          return exitPreviewMode();
-        },
-
-        getPreviewMode: function() {
-          return isPreviewMode;
-        },
-
-refreshPreviewMode: function() {
-    console.log('🔄 refreshPreviewMode called');
-    console.log('🔄 Current isPreviewMode:', isPreviewMode);
-    
-    if (isPreviewMode) {
-        console.log('🔄 Exiting preview mode first...');
-        exitPreviewMode();
-        console.log('🔄 Re-entering preview mode...');
-        setTimeout(() => {
-            enterPreviewMode();
-        }, 50);
-    }
-    return isPreviewMode;
-},
       };
 
       // ========================================
@@ -796,10 +567,10 @@ refreshPreviewMode: function() {
 
         const { type, data } = event.data;
         
-        // ADD DEBUGGING
-        console.log('=== IFRAME RECEIVED MESSAGE ===');
-        console.log('Message type:', type);
-        console.log('Message data:', data);
+    // ADD DEBUGGING
+    console.log('=== IFRAME RECEIVED MESSAGE ===');
+    console.log('Message type:', type);
+    console.log('Message data:', data);
 
         switch (type) {
           case 'set-content':
@@ -810,11 +581,12 @@ refreshPreviewMode: function() {
 
           case 'insert-variable':
             if (data.name) {
-              console.log('=== CALLING insertVariable ===');
-              console.log('Name:', data.name);
-              console.log('Type:', data.type || 'text');
-              console.log('Required:', data.required || false);
-              console.log('Value:', data.value || null);
+
+                console.log('=== CALLING insertVariable ===');
+                console.log('Name:', data.name);
+                console.log('Type:', data.type || 'text');
+                console.log('Required:', data.required || false);
+                console.log('Value:', data.value || null);
               
               window.editorAPI.insertVariable(
                 data.name,
@@ -833,14 +605,6 @@ refreshPreviewMode: function() {
               html: window.editorAPI.getHTML(),
               variables: window.editorAPI.getVariables(),
             });
-            break;
-
-          case 'toggle-preview-mode':
-            window.editorAPI.togglePreviewMode(data.enable);
-            break;
-            
-          case 'refresh-preview':
-            window.editorAPI.refreshPreviewMode();
             break;
 
           case 'focus-editor':
