@@ -546,7 +546,8 @@
               window.editorAPI.insertVariable(
                 data.name,
                 data.type || 'text',
-                data.required || false
+                data.required || false,
+                data.value || null
               );
             }
             break;
