@@ -102,20 +102,20 @@
 
       /* Styling for substituted variables in preview mode */
       .ql-editor [substituted-variable] {
-    background: linear-gradient(135deg, #fff3cd, #ffeaa7) !important;
-    padding: 2px 6px !important;
-    border-radius: 4px !important;
-    border: 1px solid #ffc107 !important;
-    font-weight: 500 !important;
-    cursor: pointer !important;
-    transition: all 0.2s ease !important;
+        background: linear-gradient(135deg, #fff3cd, #ffeaa7) !important;
+        padding: 2px 6px !important;
+        border-radius: 4px !important;
+        border: 1px solid #ffc107 !important;
+        font-weight: 500 !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
       }
 
-.ql-editor [substituted-variable]:hover {
-    background: linear-gradient(135deg, #ffeaa7, #fdcb6e) !important;
-    transform: translateY(-1px) !important;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
-}
+      .ql-editor [substituted-variable]:hover {
+        background: linear-gradient(135deg, #ffeaa7, #fdcb6e) !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+      }
 
       .ql-variable:hover {
         background: linear-gradient(135deg, #bbdefb, #90caf9) !important;
@@ -349,107 +349,120 @@
       }
 
       // ========================================
-      // NEW PREVIEW MODE FUNCTIONS
+      // PREVIEW MODE FUNCTIONS
       // ========================================
-      
-        // ========================================
-// PREVIEW MODE FUNCTIONS
-// ========================================
+      function enterPreviewMode() {
+        console.log('=== ENTERING PREVIEW MODE ===');
+        if (isPreviewMode && originalContent) {
+          console.log('Already in preview mode, skipping');
+          return false;
+        }
+        
+        if (!quillEditor) {
+          console.log('No editor found');
+          return false;
+        }
+        
+        // Store original content
+        originalContent = quillEditor.getContents();
+        console.log('Original content stored:', originalContent);
+        
+        // Get current variables and their values
+        const variables = window.editorAPI.getVariables();
+        console.log('Variables found:', variables);
+        
+        // Create transformation map
+        variablePositionMap.clear();
+        
+        // Process content for substitution
+        const transformedContent = transformContentToPreview(originalContent, variables);
+        console.log('Transformed content:', transformedContent);
+        
+        // Apply transformed content
+        isContentLoaded = false; // Prevent change notifications
+        quillEditor.setContents(transformedContent);
+        isContentLoaded = true;
+        
+        isPreviewMode = true;
+        notifyModeChanged();
+        console.log('=== PREVIEW MODE ACTIVATED ===');
+        return true;
+      }
 
-function enterPreviewMode() {
-    if (isPreviewMode || !quillEditor) return false;
-    
-    // Store original content
-    originalContent = quillEditor.getContents();
-    
-    // Get current variables and their values
-    const variables = window.editorAPI.getVariables();
-    
-    // Create transformation map
-    variablePositionMap.clear();
-    
-    // Process content for substitution
-    const transformedContent = transformContentToPreview(originalContent, variables);
-    
-    // Apply transformed content
-    isContentLoaded = false; // Prevent change notifications
-    quillEditor.setContents(transformedContent);
-    isContentLoaded = true;
-    
-    isPreviewMode = true;
-    notifyModeChanged();
-    return true;
-}
+      function exitPreviewMode() {
+        if (!isPreviewMode || !quillEditor || !originalContent) return false;
+        
+        // Restore original content with variables
+        isContentLoaded = false; // Prevent change notifications
+        quillEditor.setContents(originalContent);
+        isContentLoaded = true;
+        
+        isPreviewMode = false;
+        originalContent = null;
+        variablePositionMap.clear();
+        notifyModeChanged();
+        return true;
+      }
 
-function exitPreviewMode() {
-    if (!isPreviewMode || !quillEditor || !originalContent) return false;
-    
-    // Restore original content with variables
-    isContentLoaded = false; // Prevent change notifications
-    quillEditor.setContents(originalContent);
-    isContentLoaded = true;
-    
-    isPreviewMode = false;
-    originalContent = null;
-    variablePositionMap.clear();
-    notifyModeChanged();
-    return true;
-}
-
-function transformContentToPreview(content, variables) {
-    const newOps = [];
-    let positionOffset = 0;
-    
-    content.ops.forEach((op, index) => {
-        if (op.insert && typeof op.insert === 'object' && op.insert.variable) {
+      function transformContentToPreview(content, variables) {
+        console.log('=== TRANSFORMING CONTENT ===');
+        const newOps = [];
+        let positionOffset = 0;
+        
+        content.ops.forEach((op, index) => {
+          console.log('Processing op:', op);
+          
+          if (op.insert && typeof op.insert === 'object' && op.insert.variable) {
             // This is a variable - replace with its value
             const variable = op.insert.variable;
             const value = variableValues[variable.name] || `{{${variable.name}}}`;
             
+            console.log(`Variable found: ${variable.name} = ${value}`);
+            
             // Store position mapping
             variablePositionMap.set(positionOffset, {
-                name: variable.name,
-                type: variable.type,
-                required: variable.required,
-                originalLength: 1,
-                substitutedLength: value.length,
-                substitutedValue: value
+              name: variable.name,
+              type: variable.type,
+              required: variable.required,
+              originalLength: 1,
+              substitutedLength: value.length,
+              substitutedValue: value
             });
             
             // Create text operation with special styling
             newOps.push({
-                insert: value,
-                attributes: {
-                    'substituted-variable': variable.name,
-                    background: '#fff3cd',
-                    color: '#856404'
-                }
+              insert: value,
+              attributes: {
+                'substituted-variable': variable.name,
+                background: '#fff3cd',
+                color: '#856404'
+              }
             });
             
             positionOffset += value.length;
-        } else {
+          } else {
             // Regular content - keep as is
             newOps.push(op);
             if (typeof op.insert === 'string') {
-                positionOffset += op.insert.length;
+              positionOffset += op.insert.length;
             } else {
-                positionOffset += 1; // Non-text inserts
+              positionOffset += 1; // Non-text inserts
             }
-        }
-    });
-    
-    return { ops: newOps };
-}
+          }
+        });
+        
+        console.log('New ops created:', newOps);
+        return { ops: newOps };
+      }
 
-function notifyModeChanged() {
-    sendMessageToParent('mode-changed', {
-        editorId: editorId,
-        uuid: documentUUID,
-        isPreviewMode: isPreviewMode,
-        editModeParam: editModeParam
-    });
-}
-      
+      function notifyModeChanged() {
+        sendMessageToParent('mode-changed', {
+          editorId: editorId,
+          uuid: documentUUID,
+          isPreviewMode: isPreviewMode,
+          editModeParam: editModeParam
+        });
+      }
 
       // ========================================
       // VARIABLES GLOBALES
@@ -459,11 +472,12 @@ function notifyModeChanged() {
       let isContentLoaded = false;
       let documentUUID = null;
       let variableValues = {};
-  // Add these to the existing global variables section    
+      // Add these to the existing global variables section    
       let isPreviewMode = false;
       let originalContent = null;
       let variablePositionMap = new Map();
       let editModeParam = 'yes'; // Default to edit mode
+
       // ========================================
       // INICIALIZACIÓN DEL EDITOR
       // ========================================
@@ -495,28 +509,29 @@ function notifyModeChanged() {
         // Obtener parámetros de la URL
         const urlParams = new URLSearchParams(window.location.search);
         editorId = urlParams.get('id');
-
         const base64Content = urlParams.get('content');
         // Obtener o generar UUID
         documentUUID = urlParams.get('uuid');
-        editModeParam = urlParams.get('editmode') || 'yes'; // NEW LINE
-        isPreviewMode = editModeParam.toLowerCase() === 'no'; // NEW LINE
+        editModeParam = urlParams.get('editmode') || 'yes';
+        isPreviewMode = editModeParam.toLowerCase() === 'no';
 
-// PUT THE DEBUGGING CODE RIGHT HERE:
-console.log('=== URL PARAMETER DEBUG ===');
-console.log('Full URL:', window.location.href);
-console.log('Search params:', window.location.search);
-console.log('editmode param:', editModeParam);
-console.log('isPreviewMode:', isPreviewMode);
-console.log('================================');
+        // Debugging code
+        console.log('=== URL PARAMETER DEBUG ===');
+        console.log('Full URL:', window.location.href);
+        console.log('Search params:', window.location.search);
+        console.log('editmode param:', editModeParam);
+        console.log('isPreviewMode:', isPreviewMode);
+        console.log('================================');
         
         console.log('Document UUID:', documentUUID);
         console.log('Se pao conenido ', base64Content);
+        
         if (base64Content) {
           showLoading(true);
           console.log('llega ', base64Content);
           window.editorAPI.setContent(base64Content);
         }
+        
         // Notificar que el editor está listo
         notifyEditorReady();
 
@@ -524,24 +539,14 @@ console.log('================================');
         window.addEventListener('message', handleParentMessage);
 
         isContentLoaded = true;
-        // =====================================
-        // NEW CODE ADDED HERE
-        //======================================
+
         // Initialize preview mode based on parameter
-if (isPreviewMode) {
-    // Wait a bit for content to load, then enter preview mode
-    setTimeout(() => {
-        enterPreviewMode();
-    }, 200);
-}
-          // Add this debugging code after the URL parameter extraction
-console.log('=== URL PARAMETER DEBUG ===');
-console.log('Full URL:', window.location.href);
-console.log('Search params:', window.location.search);
-console.log('editmode param:', editModeParam);
-console.log('isPreviewMode:', isPreviewMode);
-console.log('================================');
-        
+        if (isPreviewMode) {
+          // Wait a bit for content to load, then enter preview mode
+          setTimeout(() => {
+            enterPreviewMode();
+          }, 200);
+        }
       });
 
       // ========================================
@@ -549,11 +554,11 @@ console.log('================================');
       // ========================================
       window.editorAPI = {
         insertVariable: function (name, type = 'text', required = false, value = null) {
-    console.log('=== insertVariable API CALLED ===');
-    console.log('Received name:', name);
-    console.log('Received type:', type);
-    console.log('Received required:', required);
-    console.log('Received value:', value);
+          console.log('=== insertVariable API CALLED ===');
+          console.log('Received name:', name);
+          console.log('Received type:', type);
+          console.log('Received required:', required);
+          console.log('Received value:', value);
           
           if (!quillEditor) return false;
 
@@ -574,21 +579,20 @@ console.log('================================');
 
             quillEditor.setSelection(insertIndex + 1);
 
-                    console.log('=== ABOUT TO STORE VALUE ===');
-        console.log('Value check - value !== null:', value !== null);
-        console.log('Value check - value !== undefined:', value !== undefined);
-        console.log('Value check - value !== "":', value !== '');
-        console.log('variableValues before:', variableValues);
+            console.log('=== ABOUT TO STORE VALUE ===');
+            console.log('Value check - value !== null:', value !== null);
+            console.log('Value check - value !== undefined:', value !== undefined);
+            console.log('Value check - value !== "":', value !== '');
+            console.log('variableValues before:', variableValues);
             
-       // ADD THESE LINES - YOU'RE MISSING THIS!
-            
-        if (value !== null && value !== undefined && value !== '') {
-            variableValues[name.trim()] = value;
-            console.log(`Variable value stored: ${name.trim()} = ${value}`);
-          console.log('variableValues after:', variableValues);
-        }else {
-            console.log('❌ Value not stored - failed conditions');
-        }
+            // ADD THESE LINES - YOU'RE MISSING THIS!
+            if (value !== null && value !== undefined && value !== '') {
+              variableValues[name.trim()] = value;
+              console.log(`Variable value stored: ${name.trim()} = ${value}`);
+              console.log('variableValues after:', variableValues);
+            } else {
+              console.log('❌ Value not stored - failed conditions');
+            }
             
             setTimeout(() => animateNewVariable(name), 50);
 
@@ -655,7 +659,7 @@ console.log('================================');
                 type: variable.type,
                 required: variable.required,
                 value: variableValues[variable.name] || null 
-            });
+              });
             }
           });
 
@@ -677,34 +681,32 @@ console.log('================================');
           }
           return false;
         },
-          // ===================================
-          //NEW PREVIEW MODE CODE
-          // ===================================
-            // INSERT THE NEW METHODS HERE, RIGHT AFTER THE clear() METHOD:
-    togglePreviewMode: function(enable = null) {
-        const shouldEnable = enable !== null ? enable : !isPreviewMode;
-        return shouldEnable ? enterPreviewMode() : exitPreviewMode();
-    },
 
-    enterPreviewMode: function() {
-        return enterPreviewMode();
-    },
+        // New preview mode methods
+        togglePreviewMode: function(enable = null) {
+          const shouldEnable = enable !== null ? enable : !isPreviewMode;
+          return shouldEnable ? enterPreviewMode() : exitPreviewMode();
+        },
 
-    exitPreviewMode: function() {
-        return exitPreviewMode();
-    },
+        enterPreviewMode: function() {
+          return enterPreviewMode();
+        },
 
-    getPreviewMode: function() {
-        return isPreviewMode;
-    },
+        exitPreviewMode: function() {
+          return exitPreviewMode();
+        },
 
-    refreshPreviewMode: function() {
-        if (isPreviewMode) {
+        getPreviewMode: function() {
+          return isPreviewMode;
+        },
+
+        refreshPreviewMode: function() {
+          if (isPreviewMode) {
             exitPreviewMode();
             enterPreviewMode();
-        }
-        return isPreviewMode;
-    },
+          }
+          return isPreviewMode;
+        },
       };
 
       // ========================================
@@ -746,10 +748,10 @@ console.log('================================');
 
         const { type, data } = event.data;
         
-    // ADD DEBUGGING
-    console.log('=== IFRAME RECEIVED MESSAGE ===');
-    console.log('Message type:', type);
-    console.log('Message data:', data);
+        // ADD DEBUGGING
+        console.log('=== IFRAME RECEIVED MESSAGE ===');
+        console.log('Message type:', type);
+        console.log('Message data:', data);
 
         switch (type) {
           case 'set-content':
@@ -760,12 +762,11 @@ console.log('================================');
 
           case 'insert-variable':
             if (data.name) {
-
-                console.log('=== CALLING insertVariable ===');
-                console.log('Name:', data.name);
-                console.log('Type:', data.type || 'text');
-                console.log('Required:', data.required || false);
-                console.log('Value:', data.value || null);
+              console.log('=== CALLING insertVariable ===');
+              console.log('Name:', data.name);
+              console.log('Type:', data.type || 'text');
+              console.log('Required:', data.required || false);
+              console.log('Value:', data.value || null);
               
               window.editorAPI.insertVariable(
                 data.name,
@@ -786,12 +787,13 @@ console.log('================================');
             });
             break;
 
-            case 'toggle-preview-mode':
-    window.editorAPI.togglePreviewMode(data.enable);
-    break;
-case 'refresh-preview':
-    window.editorAPI.refreshPreviewMode();
-    break;
+          case 'toggle-preview-mode':
+            window.editorAPI.togglePreviewMode(data.enable);
+            break;
+            
+          case 'refresh-preview':
+            window.editorAPI.refreshPreviewMode();
+            break;
 
           case 'focus-editor':
             window.editorAPI.focus();
