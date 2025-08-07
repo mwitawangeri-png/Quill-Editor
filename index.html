@@ -100,6 +100,23 @@
         font-size: 13px;
       }
 
+      /* Styling for substituted variables in preview mode */
+      .ql-editor [substituted-variable] {
+    background: linear-gradient(135deg, #fff3cd, #ffeaa7) !important;
+    padding: 2px 6px !important;
+    border-radius: 4px !important;
+    border: 1px solid #ffc107 !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+      }
+
+.ql-editor [substituted-variable]:hover {
+    background: linear-gradient(135deg, #ffeaa7, #fdcb6e) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
       .ql-variable:hover {
         background: linear-gradient(135deg, #bbdefb, #90caf9) !important;
         transform: translateY(-1px) !important;
@@ -332,6 +349,109 @@
       }
 
       // ========================================
+      // NEW PREVIEW MODE FUNCTIONS
+      // ========================================
+      
+        // ========================================
+// PREVIEW MODE FUNCTIONS
+// ========================================
+
+function enterPreviewMode() {
+    if (isPreviewMode || !quillEditor) return false;
+    
+    // Store original content
+    originalContent = quillEditor.getContents();
+    
+    // Get current variables and their values
+    const variables = window.editorAPI.getVariables();
+    
+    // Create transformation map
+    variablePositionMap.clear();
+    
+    // Process content for substitution
+    const transformedContent = transformContentToPreview(originalContent, variables);
+    
+    // Apply transformed content
+    isContentLoaded = false; // Prevent change notifications
+    quillEditor.setContents(transformedContent);
+    isContentLoaded = true;
+    
+    isPreviewMode = true;
+    notifyModeChanged();
+    return true;
+}
+
+function exitPreviewMode() {
+    if (!isPreviewMode || !quillEditor || !originalContent) return false;
+    
+    // Restore original content with variables
+    isContentLoaded = false; // Prevent change notifications
+    quillEditor.setContents(originalContent);
+    isContentLoaded = true;
+    
+    isPreviewMode = false;
+    originalContent = null;
+    variablePositionMap.clear();
+    notifyModeChanged();
+    return true;
+}
+
+function transformContentToPreview(content, variables) {
+    const newOps = [];
+    let positionOffset = 0;
+    
+    content.ops.forEach((op, index) => {
+        if (op.insert && typeof op.insert === 'object' && op.insert.variable) {
+            // This is a variable - replace with its value
+            const variable = op.insert.variable;
+            const value = variableValues[variable.name] || `{{${variable.name}}}`;
+            
+            // Store position mapping
+            variablePositionMap.set(positionOffset, {
+                name: variable.name,
+                type: variable.type,
+                required: variable.required,
+                originalLength: 1,
+                substitutedLength: value.length,
+                substitutedValue: value
+            });
+            
+            // Create text operation with special styling
+            newOps.push({
+                insert: value,
+                attributes: {
+                    'substituted-variable': variable.name,
+                    background: '#fff3cd',
+                    color: '#856404'
+                }
+            });
+            
+            positionOffset += value.length;
+        } else {
+            // Regular content - keep as is
+            newOps.push(op);
+            if (typeof op.insert === 'string') {
+                positionOffset += op.insert.length;
+            } else {
+                positionOffset += 1; // Non-text inserts
+            }
+        }
+    });
+    
+    return { ops: newOps };
+}
+
+function notifyModeChanged() {
+    sendMessageToParent('mode-changed', {
+        editorId: editorId,
+        uuid: documentUUID,
+        isPreviewMode: isPreviewMode,
+        editModeParam: editModeParam
+    });
+}
+      
+
+      // ========================================
       // VARIABLES GLOBALES
       // ========================================
       let quillEditor;
@@ -339,7 +459,11 @@
       let isContentLoaded = false;
       let documentUUID = null;
       let variableValues = {};
-
+  // Add these to the existing global variables section    
+      let isPreviewMode = false;
+      let originalContent = null;
+      let variablePositionMap = new Map();
+      let editModeParam = 'yes'; // Default to edit mode
       // ========================================
       // INICIALIZACIÓN DEL EDITOR
       // ========================================
@@ -375,6 +499,9 @@
         const base64Content = urlParams.get('content');
         // Obtener o generar UUID
         documentUUID = urlParams.get('uuid');
+        editModeParam = urlParams.get('editmode') || 'yes'; // NEW LINE
+        isPreviewMode = editModeParam.toLowerCase() === 'no'; // NEW LINE
+        
         console.log('Document UUID:', documentUUID);
         console.log('Se pao conenido ', base64Content);
         if (base64Content) {
@@ -389,6 +516,18 @@
         window.addEventListener('message', handleParentMessage);
 
         isContentLoaded = true;
+        // =====================================
+        // NEW CODE ADDED HERE
+        //======================================
+        // Initialize preview mode based on parameter
+if (isPreviewMode) {
+    // Wait a bit for content to load, then enter preview mode
+    setTimeout(() => {
+        enterPreviewMode();
+    }, 200);
+}
+          
+        
       });
 
       // ========================================
@@ -524,6 +663,34 @@
           }
           return false;
         },
+          // ===================================
+          //NEW PREVIEW MODE CODE
+          // ===================================
+            // INSERT THE NEW METHODS HERE, RIGHT AFTER THE clear() METHOD:
+    togglePreviewMode: function(enable = null) {
+        const shouldEnable = enable !== null ? enable : !isPreviewMode;
+        return shouldEnable ? enterPreviewMode() : exitPreviewMode();
+    },
+
+    enterPreviewMode: function() {
+        return enterPreviewMode();
+    },
+
+    exitPreviewMode: function() {
+        return exitPreviewMode();
+    },
+
+    getPreviewMode: function() {
+        return isPreviewMode;
+    },
+
+    refreshPreviewMode: function() {
+        if (isPreviewMode) {
+            exitPreviewMode();
+            enterPreviewMode();
+        }
+        return isPreviewMode;
+    },
       };
 
       // ========================================
@@ -604,6 +771,13 @@
               variables: window.editorAPI.getVariables(),
             });
             break;
+
+            case 'toggle-preview-mode':
+    window.editorAPI.togglePreviewMode(data.enable);
+    break;
+case 'refresh-preview':
+    window.editorAPI.refreshPreviewMode();
+    break;
 
           case 'focus-editor':
             window.editorAPI.focus();
