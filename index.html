@@ -330,7 +330,80 @@
           }
         );
       }
+      //===============================================
+      //NEW PREVIEW MODE CONTENT
+      //===============================================
 
+// ========================================
+// SIMPLIFIED PREVIEW MODE FUNCTIONS
+// ========================================
+function enterPreviewMode() {
+    console.log('=== ENTERING PREVIEW MODE ===');
+    
+    if (!quillEditor) return false;
+    
+    // Store current edit content as Base64
+    originalContentB64 = window.editorAPI.getContent(true);
+    
+    // Generate preview content with substituted values
+    const previewContent = generatePreviewContent();
+    
+    // Apply preview content to editor
+    isContentLoaded = false;
+    quillEditor.setContents(previewContent);
+    isContentLoaded = true;
+    
+    isPreviewMode = true;
+    console.log('=== PREVIEW MODE ACTIVATED ===');
+    return true;
+}
+
+function exitPreviewMode() {
+    console.log('=== EXITING PREVIEW MODE ===');
+    
+    if (!isPreviewMode || !originalContentB64) return false;
+    
+    // Restore original content from Base64
+    const originalContent = decodeBase64(originalContentB64);
+    
+    isContentLoaded = false;
+    quillEditor.setContents(originalContent);
+    isContentLoaded = true;
+    
+    isPreviewMode = false;
+    return true;
+}
+
+function generatePreviewContent() {
+    const currentContent = quillEditor.getContents();
+    const newOps = [];
+    
+    currentContent.ops.forEach((op) => {
+        if (op.insert && typeof op.insert === 'object' && op.insert.variable) {
+            // Replace variable with its value
+            const variable = op.insert.variable;
+            const value = variableValues[variable.name] || `{{${variable.name}}}`;
+            
+            console.log(`Replacing "${variable.name}" with "${value}"`);
+            
+            // Create styled text instead of variable embed
+            newOps.push({
+                insert: value,
+                attributes: {
+                    background: '#fff3cd',
+                    color: '#856404',
+                    'font-weight': 'bold'
+                }
+            });
+        } else {
+            // Keep regular content as-is
+            newOps.push(op);
+        }
+    });
+    
+    return { ops: newOps };
+}
+      
       // ========================================
       // VARIABLES GLOBALES
       // ========================================
@@ -340,6 +413,16 @@
       let documentUUID = null;
       let variableValues = {};
 
+      //==========================================
+      //NEW VARIABLES
+      //==========================================
+
+// Add these after the existing global variables
+let isPreviewMode = false;
+let originalContentB64 = null;  // Base64 of edit mode content
+let previewContentB64 = null;   // Base64 of preview mode content
+let editModeParam = 'yes';
+      
       // ========================================
       // INICIALIZACIÓN DEL EDITOR
       // ========================================
@@ -375,7 +458,11 @@
         const base64Content = urlParams.get('content');
         // Obtener o generar UUID
         documentUUID = urlParams.get('uuid');
+editModeParam = urlParams.get('editmode') || 'yes';
+isPreviewMode = editModeParam.toLowerCase() === 'no';
 
+console.log('editmode param:', editModeParam);
+console.log('isPreviewMode:', isPreviewMode);
         
         console.log('Document UUID:', documentUUID);
         console.log('Se pao conenido ', base64Content);
@@ -391,6 +478,17 @@
         window.addEventListener('message', handleParentMessage);
 
         isContentLoaded = true;
+
+        // =====================================
+        // PREVIEW MODE LISTENER
+        // =====================================
+                if (isPreviewMode) {
+            setTimeout(() => {
+                enterPreviewMode();
+            }, 200);
+        }
+
+        
       });
 
       // ========================================
@@ -442,6 +540,15 @@
             setTimeout(() => animateNewVariable(name), 50);
 
             notifyContentChanged();
+            
+            // Auto-refresh preview if in preview mode  <-- ADD THE NEW CODE HERE
+            if (isPreviewMode && value !== null && value !== undefined && value !== '') {
+                console.log('🔄 Auto-refreshing preview mode...');
+                setTimeout(() => {
+                    window.editorAPI.refreshPreviewMode();
+                }, 100);
+            }
+        
             return true;
           } catch (error) {
             console.error('Error al insertar variable:', error);
@@ -526,6 +633,34 @@
           }
           return false;
         },
+// Add these methods after clear():
+togglePreviewMode: function(enable = null) {
+    const shouldEnable = enable !== null ? enable : !isPreviewMode;
+    return shouldEnable ? enterPreviewMode() : exitPreviewMode();
+},
+
+enterPreviewMode: function() {
+    return enterPreviewMode();
+},
+
+exitPreviewMode: function() {
+    return exitPreviewMode();
+},
+
+getPreviewMode: function() {
+    return isPreviewMode;
+},
+
+refreshPreviewMode: function() {
+    if (isPreviewMode) {
+        exitPreviewMode();
+        setTimeout(() => {
+            enterPreviewMode();
+        }, 50);
+    }
+    return isPreviewMode;
+},
+        
       };
 
       // ========================================
@@ -640,32 +775,62 @@
       // ========================================
       // MANEJADORES DE BOTONES
       // ========================================
-      function handleSave() {
-        const content = window.editorAPI.getContent(true); // Codificado en Base64
-        const html = window.editorAPI.getHTML();
-        const variables = window.editorAPI.getVariables();
+function handleSave() {
+    console.log('=== SAVING CONTENT ===');
+    console.log('Current isPreviewMode:', isPreviewMode);
+    
+    let contentToSave;
+    let htmlToSave;
+    
+    if (isPreviewMode && originalContentB64) {
+        // We're in preview mode - save the original variable content
+        console.log('📝 Saving original variable content (not preview content)');
+        contentToSave = originalContentB64; // Already Base64 encoded
+        
+        // For HTML, we need to temporarily restore original content
+        const currentPreviewContent = quillEditor.getContents();
+        const originalContent = decodeBase64(originalContentB64);
+        
+        // Temporarily restore original to get proper HTML
+        quillEditor.setContents(originalContent);
+        htmlToSave = quillEditor.root.innerHTML;
+        
+        // Restore preview content
+        quillEditor.setContents(currentPreviewContent);
+    } else {
+        // We're in edit mode - save current content normally
+        console.log('📝 Saving current edit content');
+        contentToSave = window.editorAPI.getContent(true); // Base64 encoded
+        htmlToSave = window.editorAPI.getHTML();
+    }
+    
+    const variables = window.editorAPI.getVariables();
+    
+    console.log('📝 Content being saved (Base64):', contentToSave);
+    console.log('📝 Variables being saved:', variables);
 
-        // Enviar datos al padre
-        sendMessageToParent('save-requested', {
-          editorId: editorId,
-          uuid: documentUUID,
-          content: content,
-          html: html,
-          variables: variables,
-          timestamp: new Date().toISOString(),
-        });
+    // Enviar datos al padre
+    sendMessageToParent('save-requested', {
+        editorId: editorId,
+        uuid: documentUUID,
+        content: contentToSave,
+        html: htmlToSave,
+        variables: variables,
+        isPreviewMode: isPreviewMode, // Include current mode for reference
+        timestamp: new Date().toISOString(),
+    });
 
-        // Feedback visual
-        const saveBtn = document.getElementById('saveBtn');
-        const originalText = saveBtn.innerHTML;
-        saveBtn.innerHTML = '✅ Guardado';
-        saveBtn.disabled = true;
+    // Feedback visual
+    const saveBtn = document.getElementById('saveBtn');
+    const originalText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '✅ Guardado';
+    saveBtn.disabled = true;
 
-        setTimeout(() => {
-          saveBtn.innerHTML = originalText;
-          saveBtn.disabled = false;
-        }, 2000);
-      }
+    setTimeout(() => {
+        saveBtn.innerHTML = originalText;
+        saveBtn.disabled = false;
+    }, 2000);
+}
 
       function handleDelete() {
         if (confirm('¿Estás seguro de que deseas eliminar este documento?')) {
