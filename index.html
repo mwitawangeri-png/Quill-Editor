@@ -158,101 +158,73 @@
         font-size: 16px;
         line-height: 1.6;
       }
-/* preview styling*/
-      
-.ql-preview-variable {
-  display: inline-flex;
-  align-items: center;
-  background: linear-gradient(135deg, #e8f5e8, #c8e6c9) !important; /* Keep green color */
-  color: #2e7d32 !important;
-  font-weight: 600 !important; /* Match edit mode font weight */
-  padding: 2px 8px !important;
-  border-radius: 12px !important; /* Match edit mode border radius */
-  margin: 0 2px !important; /* Match edit mode margin */
-  cursor: default !important;
-  user-select: none !important;
-  border: 1px solid #4caf50 !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important; /* Match edit mode shadow */
-  transition: all 0.2s ease !important;
-  white-space: nowrap !important;
-  font-family: 'Consolas', monospace; /* Match edit mode font family */
-  font-size: 13px; /* Match edit mode font size */
-}
 
-.ql-preview-variable:hover {
-  background: linear-gradient(135deg, #c8e6c9, #a5d6a7) !important;
-  transform: translateY(-1px) !important;
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15) !important; /* Match edit mode hover shadow */
-}
+      /* Preview Variable Styling */
+      .ql-preview-variable {
+        display: inline-flex;
+        align-items: center;
+        background: linear-gradient(135deg, #e8f5e8, #c8e6c9) !important;
+        color: #2e7d32 !important;
+        font-weight: 500 !important;
+        padding: 2px 8px !important;
+        border-radius: 4px !important;
+        margin: 0 1px !important;
+        cursor: default !important;
+        user-select: none !important;
+        border: 1px solid #4caf50 !important;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+        transition: all 0.2s ease !important;
+        white-space: nowrap !important;
+        font-family: inherit;
+        font-size: inherit;
+      }
 
-.ql-preview-variable.type-number {
-  background: linear-gradient(135deg, #e8f5e8, #c8e6c9) !important; /* Keep consistent green */
-  border-color: #4caf50 !important;
-  color: #2e7d32 !important;
-}
+      .ql-preview-variable:hover {
+        background: linear-gradient(135deg, #c8e6c9, #a5d6a7) !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15) !important;
+      }
 
-.ql-preview-variable.type-date {
-  background: linear-gradient(135deg, #e8f5e8, #c8e6c9) !important; /* Keep consistent green */
-  border-color: #4caf50 !important;
-  color: #2e7d32 !important;
-}
+      .ql-preview-variable.type-number {
+        background: linear-gradient(135deg, #fff8e1, #ffecb3) !important;
+        border-color: #ffc107 !important;
+        color: #f57c00 !important;
+      }
 
-.ql-preview-variable.required {
-  background: linear-gradient(135deg, #ffebee, #ffcdd2) !important;
-  border-color: #f44336 !important;
-  color: #c62828 !important;
-}
+      .ql-preview-variable.type-date {
+        background: linear-gradient(135deg, #f3e5f5, #e1bee7) !important;
+        border-color: #ab47bc !important;
+        color: #6a1b9a !important;
+      }
 
-.ql-preview-variable.required::after {
-  content: ' *';
-  color: #d32f2f;
-  font-weight: bold;
-}
+      .ql-preview-variable.required {
+        background: linear-gradient(135deg, #ffebee, #ffcdd2) !important;
+        border-color: #f44336 !important;
+        color: #c62828 !important;
+      }
 
-/* Remove the green container border in preview mode */
-.editor-container.preview-mode {
-  /* Remove border styling */
-  border: none;
-  border-radius: 0;
-}
+      .ql-preview-variable.required::after {
+        content: ' *';
+        color: #d32f2f;
+        font-weight: bold;
+      }
 
-.editor-container.preview-mode .editor-toolbar {
-  /* Remove green background from toolbar */
-  background: inherit;
-  border-bottom-color: #ba3f3f; /* Keep original border color */
-}
+      /* Preview Mode Container Styling */
+      .editor-container.preview-mode {
+        border: 2px solid #4caf50;
+        border-radius: 6px;
+      }
 
-/* Animation for newly inserted variables */
-.ql-preview-variable.newly-inserted {
-  animation: variableInsert 0.4s ease-out;
-}
-/* new styles */
+      .editor-container.preview-mode .editor-toolbar {
+        background: #e8f5e8;
+        border-bottom-color: #4caf50;
+      }
 
-  .editor-container.hide-toolbar .editor-content {
-  padding-top: 15px;
-}
+      /* Animation for newly inserted variables */
+      .ql-preview-variable.newly-inserted {
+        animation: variableInsert 0.4s ease-out;
+      }
 
-.ql-editor[contenteditable="false"] {
-  background-color: #f8f9fa !important;
-  cursor: default !important;
-}
-
-.ql-editor[contenteditable="false"]:hover {
-  background-color: #f8f9fa !important;
-}
-
-.variable-protected {
-  position: relative;
-}
-
-.variable-protected::after {
-  content: "🔒";
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  font-size: 8px;
-  opacity: 0.7;
-}
       .loading-indicator {
         display: none;
         position: absolute;
@@ -486,16 +458,25 @@
       let originalContentBackup = null;
       let transformationMap = new Map();
       let targetPreviewMode = false;
-      let isReadonly = false;
-      let protectVariables = false;
-      let hideToolbar = false;
-
 
       // ========================================
       // PREVIEW MODE FUNCTIONS
       // ========================================
 
-
+function detectEditorModeFromURL() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const editMode = urlParams.get('editmode'); // Changed from 'editormode' to 'editmode'
+  
+  console.log('=== EDITOR MODE DETECTION ===');
+  console.log('editmode parameter:', editMode);
+  
+  // If editmode=no, we should be in preview mode
+  // If editmode=yes or not specified, we should be in edit mode
+  targetPreviewMode = editMode === 'no';
+  
+  console.log('Target preview mode:', targetPreviewMode);
+  return targetPreviewMode;
+}
 
       function enterPreviewMode() {
         if (isPreviewMode || !quillEditor) return false;
@@ -634,6 +615,11 @@
           editorContainer.classList.toggle('preview-mode', isPreviewMode);
         }
         
+        const toolbar = document.querySelector('.editor-toolbar');
+        if (toolbar) {
+          toolbar.style.display = isPreviewMode ? 'none' : 'flex';
+        }
+        
         const saveBtn = document.getElementById('saveBtn');
         if (saveBtn) {
           saveBtn.textContent = isPreviewMode ? 'Guardar Vista' : 'Guardar';
@@ -659,194 +645,6 @@
         return enterPreviewMode();
       }
 
-      // ===================================
-      // NEW
-      // ===================================
-
-      function detectAdvancedFeaturesFromURL() {
-  const urlParams = new URLSearchParams(window.location.search);
-  
-  // Existing edit mode detection
-  const editMode = urlParams.get('editmode');
-  targetPreviewMode = editMode === 'no';
-  
-  // New advanced features
-  isReadonly = urlParams.get('readonly') === 'yes';
-  protectVariables = urlParams.get('protectVariables') === 'yes';
-  hideToolbar = urlParams.get('hideToolbar') === 'yes';
-  
-  console.log('=== ADVANCED FEATURES DETECTION ===');
-  console.log('Edit mode (preview):', targetPreviewMode);
-  console.log('Readonly mode:', isReadonly);
-  console.log('Protect variables:', protectVariables);
-  console.log('Hide toolbar:', hideToolbar);
-  
-  return {
-    targetPreviewMode,
-    isReadonly,
-    protectVariables,
-    hideToolbar
-  };
-}
-
-function applyReadonlyMode() {
-  if (!quillEditor) return;
-  
-  console.log('Applying readonly mode:', isReadonly);
-  
-  // Enable/disable editor
-  quillEditor.enable(!isReadonly);
-  
-  // Visual feedback
-  const editorElement = document.querySelector('#editor .ql-editor');
-  if (editorElement) {
-    if (isReadonly) {
-      editorElement.style.backgroundColor = '#f8f9fa';
-      editorElement.style.cursor = 'default';
-      editorElement.setAttribute('title', 'Editor is in read-only mode');
-    } else {
-      editorElement.style.backgroundColor = '';
-      editorElement.style.cursor = '';
-      editorElement.removeAttribute('title');
-    }
-  }
-  
-  // Update save button
-  const saveBtn = document.getElementById('saveBtn');
-  if (saveBtn) {
-    if (isReadonly) {
-      saveBtn.textContent = 'Solo Lectura';
-      saveBtn.disabled = true;
-      saveBtn.style.backgroundColor = '#6c757d';
-    } else {
-      saveBtn.disabled = false;
-      saveBtn.style.backgroundColor = '';
-    }
-  }
-}
-
-function setupVariableProtection() {
-  if (!protectVariables || !quillEditor) return;
-  
-  console.log('Setting up variable protection');
-  
-  // Bind Backspace key
-  quillEditor.keyboard.addBinding({
-    key: 'Backspace'
-  }, function(range, context) {
-    return !isVariableAtPosition(range.index - 1);
-  });
-  
-  // Bind Delete key
-  quillEditor.keyboard.addBinding({
-    key: 'Delete'  
-  }, function(range, context) {
-    return !isVariableAtPosition(range.index);
-  });
-  
-  // Bind Ctrl+X (Cut) to prevent cutting variables
-  quillEditor.keyboard.addBinding({
-    key: 'X',
-    ctrlKey: true
-  }, function(range, context) {
-    if (range.length > 0) {
-      return !hasVariableInRange(range.index, range.length);
-    }
-    return true;
-  });
-}
-
-// ========================================
-// ENHANCED POSITION DETECTION
-// ========================================
-// REPLACE YOUR CURRENT isVariableAtPosition FUNCTION WITH THIS:
-
-function isVariableAtPosition(index) {
-  if (!quillEditor || index < 0) return false;
-  
-  const contents = quillEditor.getContents();
-  let currentIndex = 0;
-  
-  for (const op of contents.ops) {
-    if (op.insert) {
-      if (typeof op.insert === 'object') {
-        // This is an embed (variable or preview variable)
-        if ((op.insert.variable || op.insert.previewVariable) && currentIndex === index) {
-          return true;
-        }
-        currentIndex += 1; // Embeds count as 1 character
-      } else if (typeof op.insert === 'string') {
-        const length = op.insert.length;
-        if (currentIndex <= index && index < currentIndex + length) {
-          return false; // It's regular text
-        }
-        currentIndex += length;
-      }
-    }
-  }
-  
-  return false;
-}
-
-function hasVariableInRange(startIndex, length) {
-  if (!quillEditor) return false;
-  
-  for (let i = startIndex; i < startIndex + length; i++) {
-    if (isVariableAtPosition(i)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function applyToolbarVisibility() {
-  const toolbar = document.querySelector('.editor-toolbar');
-  const editorContent = document.querySelector('.editor-content');
-  
-  if (toolbar && hideToolbar) {
-    console.log('Hiding toolbar');
-    toolbar.style.display = 'none';
-    
-    // Adjust editor content spacing
-    if (editorContent) {
-      editorContent.style.paddingTop = '15px';
-    }
-    
-    // Add CSS class for styling
-    document.querySelector('.editor-container')?.classList.add('hide-toolbar');
-  } else if (toolbar) {
-    toolbar.style.display = '';
-    if (editorContent) {
-      editorContent.style.paddingTop = '';
-    }
-    document.querySelector('.editor-container')?.classList.remove('hide-toolbar');
-  }
-}
-
-function applyToolbarVisibility() {
-  const toolbar = document.querySelector('.editor-toolbar');
-  const editorContent = document.querySelector('.editor-content');
-  
-  if (toolbar && hideToolbar) {
-    console.log('Hiding toolbar');
-    toolbar.style.display = 'none';
-    
-    // Adjust editor content spacing
-    if (editorContent) {
-      editorContent.style.paddingTop = '15px';
-    }
-    
-    // Add CSS class for styling
-    document.querySelector('.editor-container')?.classList.add('hide-toolbar');
-  } else if (toolbar) {
-    toolbar.style.display = '';
-    if (editorContent) {
-      editorContent.style.paddingTop = '';
-    }
-    document.querySelector('.editor-container')?.classList.remove('hide-toolbar');
-  }
-}
-         
       function animateNewVariable(varName) {
         const variableSelectors = ['.ql-variable', '.ql-preview-variable'];
         
@@ -864,75 +662,70 @@ function applyToolbarVisibility() {
       }
 
       // ========================================
-      // INICIALIZACIÓN DEL EDITOR == replaced
+      // INICIALIZACIÓN DEL EDITOR
       // ========================================
-document.addEventListener('DOMContentLoaded', function () {
-  quillEditor = new Quill('#editor', {
-    theme: 'snow',
-    modules: {
-      toolbar: {
-        container: '#toolbar',
-        handlers: {},
-      },
-    },
-    placeholder: 'Escribe tu documento aquí...',
-  });
+      document.addEventListener('DOMContentLoaded', function () {
+        quillEditor = new Quill('#editor', {
+          theme: 'snow',
+          modules: {
+            toolbar: {
+              container: '#toolbar',
+              handlers: {},
+            },
+          },
+          placeholder: 'Escribe tu documento aquí...',
+        });
 
-  // Configure toolbar
-  const toolbar = quillEditor.getModule('toolbar');
-  toolbar.addHandler('bold', () =>
-    quillEditor.format('bold', !quillEditor.getFormat().bold)
-  );
+        // Configure toolbar
+        const toolbar = quillEditor.getModule('toolbar');
+        toolbar.addHandler('bold', () =>
+          quillEditor.format('bold', !quillEditor.getFormat().bold)
+        );
 
-  // Events del editor
-  quillEditor.on('text-change', function (delta, oldDelta, source) {
-    if (source === 'user' && isContentLoaded && !isReadonly) {
-      notifyContentChanged();
-    }
-  });
+        // Events del editor
+        quillEditor.on('text-change', function (delta, oldDelta, source) {
+          if (source === 'user' && isContentLoaded) {
+            notifyContentChanged();
+          }
+        });
 
-  // Get URL parameters and detect all features
-  const urlParams = new URLSearchParams(window.location.search);
-  editorId = urlParams.get('id');
-  const base64Content = urlParams.get('content');
-  documentUUID = urlParams.get('uuid');
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        editorId = urlParams.get('id');
+        const base64Content = urlParams.get('content');
+        documentUUID = urlParams.get('uuid');
 
-  // DETECT ALL ADVANCED FEATURES
-  detectAdvancedFeaturesFromURL();
+        // DETECT EDITOR MODE FROM URL
+        detectEditorModeFromURL();
 
-  console.log('Document UUID:', documentUUID);
-  console.log('Feature flags:', {
-    targetPreviewMode,
-    isReadonly,
-    protectVariables,
-    hideToolbar
-  });
+        console.log('Document UUID:', documentUUID);
+        console.log('Target preview mode:', targetPreviewMode);
 
-  // Apply advanced features
-  applyToolbarVisibility();
-  setupVariableProtection();
+        if (base64Content) {
+          showLoading(true);
+          console.log('Setting content:', base64Content);
+          window.editorAPI.setContent(base64Content);
+          
+          // Apply correct mode after content is loaded
+          setTimeout(() => {
+            applyCorrectModeFromURL();
+            showLoading(false);
+          }, 200);
+        } else {
+          // Apply correct mode immediately if no content to load
+          setTimeout(() => {
+            applyCorrectModeFromURL();
+          }, 100);
+        }
 
-  if (base64Content) {
-    showLoading(true);
-    console.log('Setting content:', base64Content);
-    window.editorAPI.setContent(base64Content);
-    
-    setTimeout(() => {
-      applyCorrectModeFromURL();
-      applyReadonlyMode(); // Apply after content is loaded
-      showLoading(false);
-    }, 200);
-  } else {
-    setTimeout(() => {
-      applyCorrectModeFromURL();
-      applyReadonlyMode(); // Apply immediately
-    }, 100);
-  }
+        // Notify that editor is ready
+        notifyEditorReady();
 
-  notifyEditorReady();
-  window.addEventListener('message', handleParentMessage);
-  isContentLoaded = true;
-});
+        // Listen for messages from parent
+        window.addEventListener('message', handleParentMessage);
+
+        isContentLoaded = true;
+      });
 
       // ========================================
       // API PÚBLICA DEL EDITOR
