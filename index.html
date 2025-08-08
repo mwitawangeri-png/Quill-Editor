@@ -726,74 +726,42 @@ function applyReadonlyMode() {
 }
 
 function setupVariableProtection() {
-  if (!protectVariables || !quillEditor) return;
+  if (!protectVariables) return;
   
-  console.log('Setting up variable protection');
+  console.log('Setting up variable protection (alternative method)');
   
-  // Override the default keyboard module bindings
-  const keyboard = quillEditor.getModule('keyboard');
+  // Listen for keydown events directly on the editor
+  const editorElement = document.querySelector('#editor .ql-editor');
   
-  // Remove existing bindings and add custom ones
-  keyboard.bindings['Backspace'] = keyboard.bindings['Backspace'] || [];
-  keyboard.bindings['Delete'] = keyboard.bindings['Delete'] || [];
-  
-  // Add our custom Backspace handler
-  keyboard.addBinding({
-    key: 'Backspace'
-  }, function(range, context) {
-    console.log('Backspace pressed, checking position:', range.index - 1);
-    const isVariable = isVariableAtPosition(range.index - 1);
-    console.log('Is variable at position?', isVariable);
-    if (isVariable) {
-      console.log('Preventing variable deletion');
-      return false; // Prevent deletion
-    }
-    return true; // Allow normal deletion
-  });
-  
-  // Add our custom Delete handler  
-  keyboard.addBinding({
-    key: 'Delete'
-  }, function(range, context) {
-    console.log('Delete pressed, checking position:', range.index);
-    const isVariable = isVariableAtPosition(range.index);
-    console.log('Is variable at position?', isVariable);
-    if (isVariable) {
-      console.log('Preventing variable deletion');
-      return false; // Prevent deletion
-    }
-    return true; // Allow normal deletion
-  });
-  
-  // Prevent cutting variables
-  keyboard.addBinding({
-    key: 'x',
-    ctrlKey: true
-  }, function(range, context) {
-    if (range.length > 0) {
-      const hasVariable = hasVariableInRange(range.index, range.length);
-      console.log('Cut operation, has variables in range?', hasVariable);
-      if (hasVariable) {
-        console.log('Preventing cut operation with variables');
+  if (editorElement) {
+    editorElement.addEventListener('keydown', function(e) {
+      const selection = quillEditor.getSelection();
+      if (!selection) return;
+      
+      let shouldPrevent = false;
+      
+      if (e.key === 'Backspace') {
+        // Check if we're about to delete a variable
+        shouldPrevent = isVariableAtPosition(selection.index - 1);
+        console.log('Backspace check:', shouldPrevent);
+      } else if (e.key === 'Delete') {
+        // Check if we're about to delete a variable
+        shouldPrevent = isVariableAtPosition(selection.index);
+        console.log('Delete check:', shouldPrevent);
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x' && selection.length > 0) {
+        // Check if selection contains variables
+        shouldPrevent = hasVariableInRange(selection.index, selection.length);
+        console.log('Cut check:', shouldPrevent);
+      }
+      
+      if (shouldPrevent) {
+        console.log('Preventing key action');
+        e.preventDefault();
+        e.stopPropagation();
         return false;
       }
-    }
-    return true;
-  });
-  
-  // Also handle Cmd+X for Mac
-  keyboard.addBinding({
-    key: 'x',
-    metaKey: true
-  }, function(range, context) {
-    if (range.length > 0) {
-      const hasVariable = hasVariableInRange(range.index, range.length);
-      if (hasVariable) {
-        return false;
-      }
-    }
-    return true;
-  });
+    });
+  }
 }
 
 function isVariableAtPosition(index) {
