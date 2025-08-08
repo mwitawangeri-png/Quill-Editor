@@ -225,7 +225,7 @@
 /* Animation for newly inserted variables */
 .ql-preview-variable.newly-inserted {
   animation: variableInsert 0.4s ease-out;
-
+}
 /* new styles */
 
   .editor-container.hide-toolbar .editor-content {
@@ -495,20 +495,7 @@
       // PREVIEW MODE FUNCTIONS
       // ========================================
 
-function detectEditorModeFromURL() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const editMode = urlParams.get('editmode'); // Changed from 'editormode' to 'editmode'
-  
-  console.log('=== EDITOR MODE DETECTION ===');
-  console.log('editmode parameter:', editMode);
-  
-  // If editmode=no, we should be in preview mode
-  // If editmode=yes or not specified, we should be in edit mode
-  targetPreviewMode = editMode === 'no';
-  
-  console.log('Target preview mode:', targetPreviewMode);
-  return targetPreviewMode;
-}
+
 
       function enterPreviewMode() {
         if (isPreviewMode || !quillEditor) return false;
