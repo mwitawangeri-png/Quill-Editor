@@ -253,6 +253,10 @@
   font-size: 8px;
   opacity: 0.7;
 }
+      /* Hide save button when readonly */
+.editor-container.readonly-mode .btn-save {
+  display: none !important;
+}
       .loading-indicator {
         display: none;
         position: absolute;
@@ -697,7 +701,7 @@ function applyReadonlyMode() {
   // Enable/disable editor
   quillEditor.enable(!isReadonly);
   
-  // Visual feedback
+  // Visual feedback on editor
   const editorElement = document.querySelector('#editor .ql-editor');
   if (editorElement) {
     if (isReadonly) {
@@ -711,18 +715,15 @@ function applyReadonlyMode() {
     }
   }
   
-  // Hide/show save button based on readonly mode
-  const saveBtn = document.getElementById('saveBtn');
-  if (saveBtn) {
+  // Add/remove readonly class to container (CSS will handle button hiding)
+  const editorContainer = document.querySelector('.editor-container');
+  if (editorContainer) {
     if (isReadonly) {
-      saveBtn.style.display = 'none'; // Hide completely
-      console.log('Save button hidden - readonly mode active');
+      editorContainer.classList.add('readonly-mode');
+      console.log('✅ Added readonly-mode class - CSS will hide save button');
     } else {
-      saveBtn.style.display = ''; // Show normally
-      saveBtn.disabled = false;
-      saveBtn.style.backgroundColor = '';
-      saveBtn.textContent = isPreviewMode ? 'Guardar Vista' : 'Guardar';
-      console.log('Save button restored - readonly mode disabled');
+      editorContainer.classList.remove('readonly-mode');
+      console.log('✅ Removed readonly-mode class - save button will show');
     }
   }
 }
