@@ -726,95 +726,186 @@ function applyReadonlyMode() {
 }
 
 function setupVariableProtection() {
-  if (!protectVariables) return;
+  console.log('=== setupVariableProtection CALLED ===');
+  console.log('protectVariables flag:', protectVariables);
+  console.log('quillEditor exists:', !!quillEditor);
   
-  console.log('Setting up variable protection (alternative method)');
+  if (!protectVariables) {
+    console.log('❌ Variable protection disabled - protectVariables is false');
+    return;
+  }
   
-  // Listen for keydown events directly on the editor
+  if (!quillEditor) {
+    console.log('❌ Variable protection disabled - quillEditor not found');
+    return;
+  }
+  
+  console.log('✅ Setting up variable protection...');
+  
+  // Try the direct event listener approach
   const editorElement = document.querySelector('#editor .ql-editor');
+  console.log('Editor element found:', !!editorElement);
+  console.log('Editor element:', editorElement);
   
   if (editorElement) {
+    console.log('Adding event listeners to editor element');
+    
     editorElement.addEventListener('keydown', function(e) {
+      console.log('🔑 Key pressed:', e.key);
+      
       const selection = quillEditor.getSelection();
-      if (!selection) return;
+      if (!selection) {
+        console.log('❌ No selection found');
+        return;
+      }
+      
+      console.log('📍 Selection:', selection);
       
       let shouldPrevent = false;
       
       if (e.key === 'Backspace') {
-        // Check if we're about to delete a variable
+        console.log('⬅️ Checking Backspace at position:', selection.index - 1);
         shouldPrevent = isVariableAtPosition(selection.index - 1);
-        console.log('Backspace check:', shouldPrevent);
+        console.log('🚫 Should prevent Backspace:', shouldPrevent);
       } else if (e.key === 'Delete') {
-        // Check if we're about to delete a variable
+        console.log('➡️ Checking Delete at position:', selection.index);
         shouldPrevent = isVariableAtPosition(selection.index);
-        console.log('Delete check:', shouldPrevent);
+        console.log('🚫 Should prevent Delete:', shouldPrevent);
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x' && selection.length > 0) {
-        // Check if selection contains variables
+        console.log('✂️ Checking Cut operation for range:', selection.index, selection.length);
         shouldPrevent = hasVariableInRange(selection.index, selection.length);
-        console.log('Cut check:', shouldPrevent);
+        console.log('🚫 Should prevent Cut:', shouldPrevent);
       }
       
       if (shouldPrevent) {
-        console.log('Preventing key action');
+        console.log('🛑 PREVENTING KEY ACTION');
         e.preventDefault();
         e.stopPropagation();
+        
+        // Visual feedback - flash red border
+        const editorContainer = document.querySelector('.editor-container');
+        if (editorContainer) {
+          editorContainer.style.border = '3px solid #ff4444';
+          setTimeout(() => {
+            editorContainer.style.border = '';
+          }, 300);
+        }
+        
         return false;
       }
-    });
+    }, true); // Use capture phase
+    
+    console.log('✅ Event listeners added successfully');
+    
+    // Test the setup immediately
+    setTimeout(() => {
+      console.log('🧪 Testing variable protection setup...');
+      debugVariableProtection();
+    }, 1000);
+    
+  } else {
+    console.log('❌ Could not find editor element');
+    console.log('Available elements:', document.querySelector('#editor'));
   }
 }
 
-function isVariableAtPosition(index) {
-  if (!quillEditor || index < 0) return false;
+// ========================================
+// ADD THESE DEBUG FUNCTIONS:
+// ========================================
+
+function debugVariableProtection() {
+  console.log('=== VARIABLE PROTECTION DEBUG ===');
+  console.log('protectVariables flag:', protectVariables);
+  console.log('quillEditor exists:', !!quillEditor);
   
-  console.log('Checking position:', index);
+  if (quillEditor) {
+    const contents = quillEditor.getContents();
+    console.log('📄 Document contents:', contents);
+    
+    console.log('=== POSITION ANALYSIS ===');
+    for (let i = 0; i < 10; i++) {
+      const isVar = isVariableAtPosition(i);
+      console.log(`Position ${i}: ${isVar ? '🔴 VARIABLE' : '⚪ text/empty'}`);
+    }
+  }
+  
+  const editorElement = document.querySelector('#editor .ql-editor');
+  console.log('Editor element found:', !!editorElement);
+}
+
+function testPosition(index) {
+  console.log(`🧪 Testing position ${index}:`, isVariableAtPosition(index));
+}
+
+// ========================================
+// ENHANCED POSITION DETECTION
+// ========================================
+// REPLACE YOUR CURRENT isVariableAtPosition FUNCTION WITH THIS:
+
+function isVariableAtPosition(index) {
+  console.log('🔍 isVariableAtPosition called with index:', index);
+  
+  if (!quillEditor || index < 0) {
+    console.log('❌ Invalid conditions - no editor or negative index');
+    return false;
+  }
+  
   const contents = quillEditor.getContents();
+  console.log('📄 Current document ops count:', contents.ops.length);
+  
   let currentIndex = 0;
   
   for (let i = 0; i < contents.ops.length; i++) {
     const op = contents.ops[i];
+    console.log(`📍 Processing op ${i}:`, op, 'at index', currentIndex);
     
     if (op.insert) {
       if (typeof op.insert === 'object') {
-        // This is an embed (variable or preview variable)
-        const isVariableEmbed = op.insert.variable || op.insert.previewVariable;
-        console.log(`Position ${currentIndex}: Found embed`, isVariableEmbed ? 'VARIABLE' : 'OTHER', op.insert);
+        // Check for variable or preview variable
+        const hasVariable = !!(op.insert.variable || op.insert.previewVariable);
+        const variableType = op.insert.variable ? 'variable' : (op.insert.previewVariable ? 'previewVariable' : 'other');
         
-        if (isVariableEmbed && currentIndex === index) {
-          console.log('Match found! Variable at position', index);
+        console.log(`🎯 Found embed at index ${currentIndex}:`, variableType, hasVariable);
+        
+        if (hasVariable && currentIndex === index) {
+          console.log('✅ MATCH! Variable found at target index', index);
           return true;
         }
         currentIndex += 1; // Embeds count as 1 character
       } else if (typeof op.insert === 'string') {
         const length = op.insert.length;
-        console.log(`Position ${currentIndex}-${currentIndex + length - 1}: Text "${op.insert}"`);
+        console.log(`📝 Text from index ${currentIndex} to ${currentIndex + length - 1}: "${op.insert}"`);
         
         if (currentIndex <= index && index < currentIndex + length) {
-          console.log('Position is in text, not a variable');
-          return false; // It's regular text
+          console.log('📝 Target index is within text content - not a variable');
+          return false;
         }
         currentIndex += length;
       }
     }
   }
   
-  console.log('No variable found at position', index);
+  console.log('❌ No variable found at index', index);
   return false;
 }
 
+// ========================================
+// ALSO REPLACE hasVariableInRange:
+// ========================================
+
 function hasVariableInRange(startIndex, length) {
-  if (!quillEditor || length === 0) return false;
+  console.log('🔍 hasVariableInRange called:', startIndex, 'length:', length);
   
-  console.log(`Checking range ${startIndex} to ${startIndex + length - 1}`);
+  if (!quillEditor || length === 0) return false;
   
   for (let i = startIndex; i < startIndex + length; i++) {
     if (isVariableAtPosition(i)) {
-      console.log('Found variable in range at position', i);
+      console.log('✅ Found variable in range at position', i);
       return true;
     }
   }
   
-  console.log('No variables found in range');
+  console.log('❌ No variables found in range');
   return false;
 }
 
