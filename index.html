@@ -726,115 +726,34 @@ function applyReadonlyMode() {
 }
 
 function setupVariableProtection() {
-  console.log('=== setupVariableProtection CALLED ===');
-  console.log('protectVariables flag:', protectVariables);
-  console.log('quillEditor exists:', !!quillEditor);
+  if (!protectVariables || !quillEditor) return;
   
-  if (!protectVariables) {
-    console.log('❌ Variable protection disabled - protectVariables is false');
-    return;
-  }
+  console.log('Setting up variable protection');
   
-  if (!quillEditor) {
-    console.log('❌ Variable protection disabled - quillEditor not found');
-    return;
-  }
+  // Bind Backspace key
+  quillEditor.keyboard.addBinding({
+    key: 'Backspace'
+  }, function(range, context) {
+    return !isVariableAtPosition(range.index - 1);
+  });
   
-  console.log('✅ Setting up variable protection...');
+  // Bind Delete key
+  quillEditor.keyboard.addBinding({
+    key: 'Delete'  
+  }, function(range, context) {
+    return !isVariableAtPosition(range.index);
+  });
   
-  // Try the direct event listener approach
-  const editorElement = document.querySelector('#editor .ql-editor');
-  console.log('Editor element found:', !!editorElement);
-  console.log('Editor element:', editorElement);
-  
-  if (editorElement) {
-    console.log('Adding event listeners to editor element');
-    
-    editorElement.addEventListener('keydown', function(e) {
-      console.log('🔑 Key pressed:', e.key);
-      
-      const selection = quillEditor.getSelection();
-      if (!selection) {
-        console.log('❌ No selection found');
-        return;
-      }
-      
-      console.log('📍 Selection:', selection);
-      
-      let shouldPrevent = false;
-      
-      if (e.key === 'Backspace') {
-        console.log('⬅️ Checking Backspace at position:', selection.index - 1);
-        shouldPrevent = isVariableAtPosition(selection.index - 1);
-        console.log('🚫 Should prevent Backspace:', shouldPrevent);
-      } else if (e.key === 'Delete') {
-        console.log('➡️ Checking Delete at position:', selection.index);
-        shouldPrevent = isVariableAtPosition(selection.index);
-        console.log('🚫 Should prevent Delete:', shouldPrevent);
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x' && selection.length > 0) {
-        console.log('✂️ Checking Cut operation for range:', selection.index, selection.length);
-        shouldPrevent = hasVariableInRange(selection.index, selection.length);
-        console.log('🚫 Should prevent Cut:', shouldPrevent);
-      }
-      
-      if (shouldPrevent) {
-        console.log('🛑 PREVENTING KEY ACTION');
-        e.preventDefault();
-        e.stopPropagation();
-        
-        // Visual feedback - flash red border
-        const editorContainer = document.querySelector('.editor-container');
-        if (editorContainer) {
-          editorContainer.style.border = '3px solid #ff4444';
-          setTimeout(() => {
-            editorContainer.style.border = '';
-          }, 300);
-        }
-        
-        return false;
-      }
-    }, true); // Use capture phase
-    
-    console.log('✅ Event listeners added successfully');
-    
-    // Test the setup immediately
-    setTimeout(() => {
-      console.log('🧪 Testing variable protection setup...');
-      debugVariableProtection();
-    }, 1000);
-    
-  } else {
-    console.log('❌ Could not find editor element');
-    console.log('Available elements:', document.querySelector('#editor'));
-  }
-}
-
-// ========================================
-// ADD THESE DEBUG FUNCTIONS:
-// ========================================
-
-function debugVariableProtection() {
-  console.log('=== VARIABLE PROTECTION DEBUG ===');
-  console.log('protectVariables flag:', protectVariables);
-  console.log('quillEditor exists:', !!quillEditor);
-  
-  if (quillEditor) {
-    const contents = quillEditor.getContents();
-    console.log('📄 Document contents:', contents);
-    
-    console.log('=== POSITION ANALYSIS ===');
-    for (let i = 0; i < 10; i++) {
-      const isVar = isVariableAtPosition(i);
-      console.log(`Position ${i}: ${isVar ? '🔴 VARIABLE' : '⚪ text/empty'}`);
+  // Bind Ctrl+X (Cut) to prevent cutting variables
+  quillEditor.keyboard.addBinding({
+    key: 'X',
+    ctrlKey: true
+  }, function(range, context) {
+    if (range.length > 0) {
+      return !hasVariableInRange(range.index, range.length);
     }
-  }
-  
-  const editorElement = document.querySelector('#editor .ql-editor');
-  console.log('Editor element found:', !!editorElement);
-}
-
-function testPosition(index) {
-  console.log(`🧪 Testing position ${index}:`, isVariableAtPosition(index));
+    return true;
+  });
 }
 
 // ========================================
@@ -843,70 +762,65 @@ function testPosition(index) {
 // REPLACE YOUR CURRENT isVariableAtPosition FUNCTION WITH THIS:
 
 function isVariableAtPosition(index) {
-  console.log('🔍 isVariableAtPosition called with index:', index);
-  
-  if (!quillEditor || index < 0) {
-    console.log('❌ Invalid conditions - no editor or negative index');
-    return false;
-  }
+  if (!quillEditor || index < 0) return false;
   
   const contents = quillEditor.getContents();
-  console.log('📄 Current document ops count:', contents.ops.length);
-  
   let currentIndex = 0;
   
-  for (let i = 0; i < contents.ops.length; i++) {
-    const op = contents.ops[i];
-    console.log(`📍 Processing op ${i}:`, op, 'at index', currentIndex);
-    
+  for (const op of contents.ops) {
     if (op.insert) {
       if (typeof op.insert === 'object') {
-        // Check for variable or preview variable
-        const hasVariable = !!(op.insert.variable || op.insert.previewVariable);
-        const variableType = op.insert.variable ? 'variable' : (op.insert.previewVariable ? 'previewVariable' : 'other');
-        
-        console.log(`🎯 Found embed at index ${currentIndex}:`, variableType, hasVariable);
-        
-        if (hasVariable && currentIndex === index) {
-          console.log('✅ MATCH! Variable found at target index', index);
+        // This is an embed (variable or preview variable)
+        if ((op.insert.variable || op.insert.previewVariable) && currentIndex === index) {
           return true;
         }
         currentIndex += 1; // Embeds count as 1 character
       } else if (typeof op.insert === 'string') {
         const length = op.insert.length;
-        console.log(`📝 Text from index ${currentIndex} to ${currentIndex + length - 1}: "${op.insert}"`);
-        
         if (currentIndex <= index && index < currentIndex + length) {
-          console.log('📝 Target index is within text content - not a variable');
-          return false;
+          return false; // It's regular text
         }
         currentIndex += length;
       }
     }
   }
   
-  console.log('❌ No variable found at index', index);
   return false;
 }
 
-// ========================================
-// ALSO REPLACE hasVariableInRange:
-// ========================================
-
 function hasVariableInRange(startIndex, length) {
-  console.log('🔍 hasVariableInRange called:', startIndex, 'length:', length);
-  
-  if (!quillEditor || length === 0) return false;
+  if (!quillEditor) return false;
   
   for (let i = startIndex; i < startIndex + length; i++) {
     if (isVariableAtPosition(i)) {
-      console.log('✅ Found variable in range at position', i);
       return true;
     }
   }
-  
-  console.log('❌ No variables found in range');
   return false;
+}
+
+function applyToolbarVisibility() {
+  const toolbar = document.querySelector('.editor-toolbar');
+  const editorContent = document.querySelector('.editor-content');
+  
+  if (toolbar && hideToolbar) {
+    console.log('Hiding toolbar');
+    toolbar.style.display = 'none';
+    
+    // Adjust editor content spacing
+    if (editorContent) {
+      editorContent.style.paddingTop = '15px';
+    }
+    
+    // Add CSS class for styling
+    document.querySelector('.editor-container')?.classList.add('hide-toolbar');
+  } else if (toolbar) {
+    toolbar.style.display = '';
+    if (editorContent) {
+      editorContent.style.paddingTop = '';
+    }
+    document.querySelector('.editor-container')?.classList.remove('hide-toolbar');
+  }
 }
 
 function applyToolbarVisibility() {
