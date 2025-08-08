@@ -711,16 +711,18 @@ function applyReadonlyMode() {
     }
   }
   
-  // Update save button
+  // Hide/show save button based on readonly mode
   const saveBtn = document.getElementById('saveBtn');
   if (saveBtn) {
     if (isReadonly) {
-      saveBtn.textContent = 'Solo Lectura';
-      saveBtn.disabled = true;
-      saveBtn.style.backgroundColor = '#6c757d';
+      saveBtn.style.display = 'none'; // Hide completely
+      console.log('Save button hidden - readonly mode active');
     } else {
+      saveBtn.style.display = ''; // Show normally
       saveBtn.disabled = false;
       saveBtn.style.backgroundColor = '';
+      saveBtn.textContent = isPreviewMode ? 'Guardar Vista' : 'Guardar';
+      console.log('Save button restored - readonly mode disabled');
     }
   }
 }
