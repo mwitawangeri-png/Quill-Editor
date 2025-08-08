@@ -730,27 +730,67 @@ function setupVariableProtection() {
   
   console.log('Setting up variable protection');
   
-  // Bind Backspace key
-  quillEditor.keyboard.addBinding({
+  // Override the default keyboard module bindings
+  const keyboard = quillEditor.getModule('keyboard');
+  
+  // Remove existing bindings and add custom ones
+  keyboard.bindings['Backspace'] = keyboard.bindings['Backspace'] || [];
+  keyboard.bindings['Delete'] = keyboard.bindings['Delete'] || [];
+  
+  // Add our custom Backspace handler
+  keyboard.addBinding({
     key: 'Backspace'
   }, function(range, context) {
-    return !isVariableAtPosition(range.index - 1);
+    console.log('Backspace pressed, checking position:', range.index - 1);
+    const isVariable = isVariableAtPosition(range.index - 1);
+    console.log('Is variable at position?', isVariable);
+    if (isVariable) {
+      console.log('Preventing variable deletion');
+      return false; // Prevent deletion
+    }
+    return true; // Allow normal deletion
   });
   
-  // Bind Delete key
-  quillEditor.keyboard.addBinding({
-    key: 'Delete'  
+  // Add our custom Delete handler  
+  keyboard.addBinding({
+    key: 'Delete'
   }, function(range, context) {
-    return !isVariableAtPosition(range.index);
+    console.log('Delete pressed, checking position:', range.index);
+    const isVariable = isVariableAtPosition(range.index);
+    console.log('Is variable at position?', isVariable);
+    if (isVariable) {
+      console.log('Preventing variable deletion');
+      return false; // Prevent deletion
+    }
+    return true; // Allow normal deletion
   });
   
-  // Bind Ctrl+X (Cut) to prevent cutting variables
-  quillEditor.keyboard.addBinding({
-    key: 'X',
+  // Prevent cutting variables
+  keyboard.addBinding({
+    key: 'x',
     ctrlKey: true
   }, function(range, context) {
     if (range.length > 0) {
-      return !hasVariableInRange(range.index, range.length);
+      const hasVariable = hasVariableInRange(range.index, range.length);
+      console.log('Cut operation, has variables in range?', hasVariable);
+      if (hasVariable) {
+        console.log('Preventing cut operation with variables');
+        return false;
+      }
+    }
+    return true;
+  });
+  
+  // Also handle Cmd+X for Mac
+  keyboard.addBinding({
+    key: 'x',
+    metaKey: true
+  }, function(range, context) {
+    if (range.length > 0) {
+      const hasVariable = hasVariableInRange(range.index, range.length);
+      if (hasVariable) {
+        return false;
+      }
     }
     return true;
   });
@@ -759,20 +799,30 @@ function setupVariableProtection() {
 function isVariableAtPosition(index) {
   if (!quillEditor || index < 0) return false;
   
+  console.log('Checking position:', index);
   const contents = quillEditor.getContents();
   let currentIndex = 0;
   
-  for (const op of contents.ops) {
+  for (let i = 0; i < contents.ops.length; i++) {
+    const op = contents.ops[i];
+    
     if (op.insert) {
       if (typeof op.insert === 'object') {
         // This is an embed (variable or preview variable)
-        if ((op.insert.variable || op.insert.previewVariable) && currentIndex === index) {
+        const isVariableEmbed = op.insert.variable || op.insert.previewVariable;
+        console.log(`Position ${currentIndex}: Found embed`, isVariableEmbed ? 'VARIABLE' : 'OTHER', op.insert);
+        
+        if (isVariableEmbed && currentIndex === index) {
+          console.log('Match found! Variable at position', index);
           return true;
         }
         currentIndex += 1; // Embeds count as 1 character
       } else if (typeof op.insert === 'string') {
         const length = op.insert.length;
+        console.log(`Position ${currentIndex}-${currentIndex + length - 1}: Text "${op.insert}"`);
+        
         if (currentIndex <= index && index < currentIndex + length) {
+          console.log('Position is in text, not a variable');
           return false; // It's regular text
         }
         currentIndex += length;
@@ -780,17 +830,23 @@ function isVariableAtPosition(index) {
     }
   }
   
+  console.log('No variable found at position', index);
   return false;
 }
 
 function hasVariableInRange(startIndex, length) {
-  if (!quillEditor) return false;
+  if (!quillEditor || length === 0) return false;
+  
+  console.log(`Checking range ${startIndex} to ${startIndex + length - 1}`);
   
   for (let i = startIndex; i < startIndex + length; i++) {
     if (isVariableAtPosition(i)) {
+      console.log('Found variable in range at position', i);
       return true;
     }
   }
+  
+  console.log('No variables found in range');
   return false;
 }
 
