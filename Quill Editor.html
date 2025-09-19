@@ -561,6 +561,14 @@ class VariableBlot extends Parchment.Embed {
             return false;
           }
         },
+        // NEW: Add this method to your editorAPI
+refreshVariableDisplay: function() {
+    const variables = document.querySelectorAll('.ql-variable');
+    variables.forEach(varNode => {
+        const varData = VariableBlot.value(varNode);
+        VariableBlot.updateContent(varNode, varData);
+    });
+},
 
         getContent: function (encode = false) {
           if (!quillEditor) return null;
