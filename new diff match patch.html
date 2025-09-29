@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/diff_match_patch/20121119/diff_match_patch.js"></script>
+    <style>
+        #displayHTML {
+            font-family: 'Times New Roman', Georgia, serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 100%;
+        }
+        
+        #displayHTML h1, #displayHTML h2, #displayHTML h3, 
+        #displayHTML h4, #displayHTML h5, #displayHTML h6 {
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+            font-weight: 600;
+        }
+        
+        #displayHTML h1 { font-size: 1.8em; }
+        #displayHTML h2 { font-size: 1.5em; }
+        #displayHTML h3 { font-size: 1.3em; }
+        #displayHTML h4 { font-size: 1.1em; }
+        
+        #displayHTML p {
+            margin-bottom: 1em;
+        }
+        
+        #displayHTML ul, #displayHTML ol {
+            margin-bottom: 1em;
+            padding-left: 2em;
+        }
+        
+        #displayHTML li {
+            margin-bottom: 0.3em;
+        }
+        
+        .diff-addition {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: 500;
+        }
+        
+        .diff-deletion {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: 500;
+            text-decoration: line-through;
+        }
+        
+        .diff-unchanged {
+            color: #495057;
+        }
+    </style>
+</head>
+<body>
+    <!-- Placeholder div for diff output -->
+    <div id="displayHTML"></div>
+    
+    <script>
+        // ==============================================
+        // OPTIMIZED HTML CONVERTER CLASS (HYBRID)
+        // ==============================================
+        class OptimizedHTMLConverter {
+            constructor(options = {}) {
+                this.chunkSize = options.chunkSize || 50000;
+                this.memoryOptimized = options.memoryOptimized !== false;
+                this.preserveHTMLStructure = options.preserveHTMLStructure !== false;
+            }
+
+            async convertHTML(html) {
+                if (!html || typeof html !== 'string') return '';
+                
+                if (this.memoryOptimized && html.length > this.chunkSize) {
+                    return await this.convertInChunks(html);
+                }
+                return this.convertDirect(html);
+            }
+
+            async convertInChunks(html) {
+                const parser = new DOMParser();
+                const chunks = this.splitHTMLIntoChunks(html);
+                let result = '';
+                
+                for (let i = 0; i < chunks.length; i++) {
+                    const doc = parser.parseFromString(chunks[i], 'text/html');
+                    result += this.extractStructuredText(doc.body);
+                    
+                    if (i % 10 === 0) {
+                        await this.sleep(10);
+                    }
+                }
+                
+                return this.cleanupText(result);
+            }
+
+            convertDirect(html) {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                return this.cleanupText(this.extractStructuredText(doc.body));
+            }
+
+            splitHTMLIntoChunks(html) {
+                const chunks = [];
+                let current = '';
+                let tagStack = [];
+                let i = 0;
+                
+                while (i < html.length) {
+                    if (current.length >= this.chunkSize && tagStack.length === 0) {
+                        chunks.push(current);
+                        current = '';
+                    }
+                    
+                    current += html[i];
+                    
+                    if (html[i] === '<') {
+                        const tagEnd = html.indexOf('>', i);
+                        if (tagEnd > i) {
+                            const tag = html.substring(i, tagEnd + 1);
+                            if (tag.startsWith('</')) {
+                                tagStack.pop();
+                            } else if (!tag.endsWith('/>') && !['<br', '<hr', '<img', '<input'].some(t => tag.startsWith(t))) {
+                                tagStack.push(tag);
+                            }
+                            current += html.substring(i + 1, tagEnd + 1);
+                            i = tagEnd;
+                        }
+                    }
+                    i++;
+                }
+                
+                if (current) chunks.push(current);
+                return chunks;
+            }
+
+            extractStructuredText(node) {
+                if (!node) return '';
+                
+                let result = '';
+                
+                const processNode = (currentNode) => {
+                    if (currentNode.nodeType === Node.TEXT_NODE) {
+                        const text = currentNode.textContent.trim();
+                        if (text) {
+                            result += text + ' ';
+                        }
+                    } else if (currentNode.nodeType === Node.ELEMENT_NODE) {
+                        const tagName = currentNode.tagName.toLowerCase();
+                        
+                        // Opening structural markers
+                        switch (tagName) {
+                            case 'h1':
+                                result += '{{H1_OPEN}}';
+                                break;
+                            case 'h2':
+                                result += '{{H2_OPEN}}';
+                                break;
+                            case 'h3':
+                                result += '{{H3_OPEN}}';
+                                break;
+                            case 'h4':
+                                result += '{{H4_OPEN}}';
+                                break;
+                            case 'h5':
+                                result += '{{H5_OPEN}}';
+                                break;
+                            case 'h6':
+                                result += '{{H6_OPEN}}';
+                                break;
+                            case 'p':
+                                result += '{{P_OPEN}}';
+                                break;
+                            case 'div':
+                            case 'section':
+                            case 'article':
+                                result += '{{DIV_OPEN}}';
+                                break;
+                            case 'br':
+                                result += '{{BR}}';
+                                return; // br doesn't have children
+                            case 'li':
+                                result += '{{LI_OPEN}}';
+                                break;
+                            case 'ul':
+                                result += '{{UL_OPEN}}';
+                                break;
+                            case 'ol':
+                                result += '{{OL_OPEN}}';
+                                break;
+                        }
+                        
+                        // Process children
+                        Array.from(currentNode.childNodes).forEach(child => {
+                            processNode(child);
+                        });
+                        
+                        // Closing structural markers
+                        switch (tagName) {
+                            case 'h1':
+                                result += '{{H1_CLOSE}}';
+                                break;
+                            case 'h2':
+                                result += '{{H2_CLOSE}}';
+                                break;
+                            case 'h3':
+                                result += '{{H3_CLOSE}}';
+                                break;
+                            case 'h4':
+                                result += '{{H4_CLOSE}}';
+                                break;
+                            case 'h5':
+                                result += '{{H5_CLOSE}}';
+                                break;
+                            case 'h6':
+                                result += '{{H6_CLOSE}}';
+                                break;
+                            case 'p':
+                                result += '{{P_CLOSE}}';
+                                break;
+                            case 'div':
+                            case 'section':
+                            case 'article':
+                                result += '{{DIV_CLOSE}}';
+                                break;
+                            case 'li':
+                                result += '{{LI_CLOSE}}';
+                                break;
+                            case 'ul':
+                                result += '{{UL_CLOSE}}';
+                                break;
+                            case 'ol':
+                                result += '{{OL_CLOSE}}';
+                                break;
+                        }
+                    }
+                };
+                
+                processNode(node);
+                return result;
+            }
+
+            cleanupText(text) {
+                return text
+                    .replace(/\s+/g, ' ')
+                    .replace(/\s+({{[^}]+}})/g, '$1')
+                    .replace(/({{[^}]+}})\s+/g, '$1')
+                    .trim();
+            }
+
+            sleep(ms) {
+                return new Promise(resolve => setTimeout(resolve, ms));
+            }
+        }
+
+        // ==============================================
+        // OPTIMIZED DIFF PROCESSOR CLASS
+        // ==============================================
+        class OptimizedDiffProcessor {
+            constructor(options = {}) {
+                this.maxDiffLength = options.maxDiffLength || 1000000;
+                this.chunkSize = options.chunkSize || 10000;
+            }
+
+            async processDiff(text1, text2) {
+                if (text1.length + text2.length > this.maxDiffLength) {
+                    return await this.processLargeDiff(text1, text2);
+                }
+                
+                const dmp = new diff_match_patch();
+                dmp.Diff_Timeout = 5.0;
+                dmp.Diff_EditCost = 10;
+                
+                const diffs = dmp.diff_main(text1, text2);
+                dmp.diff_cleanupSemantic(diffs);
+                
+                return [{
+                    diffs: diffs,
+                    stats: this.calculateStats(diffs)
+                }];
+            }
+
+            async processLargeDiff(text1, text2) {
+                const chunks1 = this.smartSplit(text1);
+                const chunks2 = this.smartSplit(text2);
+                const results = [];
+                const totalChunks = Math.max(chunks1.length, chunks2.length);
+                
+                for (let i = 0; i < totalChunks; i++) {
+                    const chunk1 = chunks1[i] || '';
+                    const chunk2 = chunks2[i] || '';
+                    
+                    const dmp = new diff_match_patch();
+                    dmp.Diff_Timeout = 2.0;
+                    
+                    const diffs = dmp.diff_main(chunk1, chunk2);
+                    dmp.diff_cleanupSemantic(diffs);
+                    
+                    results.push({
+                        diffs: diffs,
+                        stats: this.calculateStats(diffs),
+                        chunkIndex: i
+                    });
+                    
+                    if (i % 5 === 0) await this.sleep(10);
+                }
+                
+                return results;
+            }
+
+            smartSplit(text) {
+                // Split on structural markers to maintain document structure
+                const splitPattern = /({{[^}]+}})/;
+                let chunks = text.split(splitPattern);
+                const result = [];
+                let currentChunk = '';
+                
+                chunks.forEach(chunk => {
+                    if (currentChunk.length + chunk.length > this.chunkSize && currentChunk) {
+                        result.push(currentChunk);
+                        currentChunk = chunk;
+                    } else {
+                        currentChunk += chunk;
+                    }
+                });
+                
+                if (currentChunk) result.push(currentChunk);
+                return result.length > 0 ? result : [text];
+            }
+
+            calculateStats(diffs) {
+                return {
+                    additions: diffs.filter(d => d[0] === 1).reduce((sum, d) => sum + d[1].length, 0),
+                    deletions: diffs.filter(d => d[0] === -1).reduce((sum, d) => sum + d[1].length, 0),
+                    unchanged: diffs.filter(d => d[0] === 0).reduce((sum, d) => sum + d[1].length, 0)
+                };
+            }
+
+            sleep(ms) {
+                return new Promise(resolve => setTimeout(resolve, ms));
+            }
+        }
+
+        // ==============================================
+        // HTML FORMATTER (CONVERTS MARKERS TO HTML)
+        // ==============================================
+        class HTMLFormatter {
+            formatDiffToHTML(chunks) {
+                let html = '';
+                
+                chunks.forEach(chunk => {
+                    chunk.diffs.forEach(([operation, text]) => {
+                        const formattedText = this.convertMarkersToHTML(text, operation);
+                        html += formattedText;
+                    });
+                });
+                
+                // Post-process to fix any remaining markers and tag issues
+                html = this.postProcessHTML(html);
+                
+                return html;
+            }
+
+            convertMarkersToHTML(text, operation) {
+                // Apply diff styling class
+                const diffClass = operation === 1 ? 'diff-addition' : 
+                                 operation === -1 ? 'diff-deletion' : 
+                                 'diff-unchanged';
+                
+                // Convert all structural markers to HTML tags with proper escaping
+                let processed = text;
+                
+                // Replace markers with HTML tags
+                const replacements = [
+                    [/\{\{H1_OPEN\}\}/g, `<h1 class="${diffClass}">`],
+                    [/\{\{H1_CLOSE\}\}/g, `</h1>`],
+                    [/\{\{H2_OPEN\}\}/g, `<h2 class="${diffClass}">`],
+                    [/\{\{H2_CLOSE\}\}/g, `</h2>`],
+                    [/\{\{H3_OPEN\}\}/g, `<h3 class="${diffClass}">`],
+                    [/\{\{H3_CLOSE\}\}/g, `</h3>`],
+                    [/\{\{H4_OPEN\}\}/g, `<h4 class="${diffClass}">`],
+                    [/\{\{H4_CLOSE\}\}/g, `</h4>`],
+                    [/\{\{H5_OPEN\}\}/g, `<h5 class="${diffClass}">`],
+                    [/\{\{H5_CLOSE\}\}/g, `</h5>`],
+                    [/\{\{H6_OPEN\}\}/g, `<h6 class="${diffClass}">`],
+                    [/\{\{H6_CLOSE\}\}/g, `</h6>`],
+                    [/\{\{P_OPEN\}\}/g, `<p class="${diffClass}">`],
+                    [/\{\{P_CLOSE\}\}/g, `</p>`],
+                    [/\{\{DIV_OPEN\}\}/g, `<div class="${diffClass}">`],
+                    [/\{\{DIV_CLOSE\}\}/g, `</div>`],
+                    [/\{\{BR\}\}/g, `<br>`],
+                    [/\{\{UL_OPEN\}\}/g, `<ul>`],
+                    [/\{\{UL_CLOSE\}\}/g, `</ul>`],
+                    [/\{\{OL_OPEN\}\}/g, `<ol>`],
+                    [/\{\{OL_CLOSE\}\}/g, `</ol>`],
+                    [/\{\{LI_OPEN\}\}/g, `<li class="${diffClass}">`],
+                    [/\{\{LI_CLOSE\}\}/g, `</li>`]
+                ];
+                
+                replacements.forEach(([pattern, replacement]) => {
+                    processed = processed.replace(pattern, replacement);
+                });
+                
+                // Escape HTML entities in text content only (not in tags we just created)
+                const parts = processed.split(/(<[^>]+>)/);
+                processed = parts.map((part, index) => {
+                    // Even indices are text content, odd indices are HTML tags
+                    if (index % 2 === 0 && part.trim()) {
+                        return part.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    }
+                    return part;
+                }).join('');
+                
+                // Wrap plain text (no tags) with span
+                if (!processed.match(/<[^>]+>/) && processed.trim()) {
+                    processed = `<span class="${diffClass}">${processed}</span>`;
+                }
+                
+                return processed;
+            }
+
+            postProcessHTML(html) {
+                // Remove any remaining unconverted markers (fallback safety)
+                html = html.replace(/\{\{[A-Z_]+\}\}/g, '');
+                
+                // Fix cases where class attributes might be duplicated
+                html = html.replace(/class="([^"]+)"\s+class="[^"]+"/g, 'class="$1"');
+                
+                // Remove empty tags
+                html = html.replace(/<(h[1-6]|p|div|li|span)\s+class="[^"]*">\s*<\/\1>/g, '');
+                
+                // Clean up multiple consecutive spaces
+                html = html.replace(/\s{2,}/g, ' ');
+                
+                return html;
+            }
+
+            cleanupHTML(html) {
+                // Additional cleanup pass
+                html = this.postProcessHTML(html);
+                
+                // Fix nested spans of the same class
+                html = html.replace(/<span class="([^"]+)"><span class="\1">/g, '<span class="$1">');
+                html = html.replace(/<\/span><\/span>/g, '</span>');
+                
+                return html;
+            }
+        }
+
+        // ==============================================
+        // API FUNCTIONS
+        // ==============================================
+
+        const htmlFormatter = new HTMLFormatter();
+
+        // Convert HTML to plain text with structural markers
+        async function htmlToPlainText(html, options = {}) {
+            const converter = new OptimizedHTMLConverter(options);
+            return await converter.convertHTML(html);
+        }
+
+        // Compare two HTML versions and return detailed diff data
+        async function compareHTML(html1, html2, options = {}) {
+            const converter = new OptimizedHTMLConverter(options);
+            const processor = new OptimizedDiffProcessor(options);
+            
+            const text1 = await converter.convertHTML(html1);
+            const text2 = await converter.convertHTML(html2);
+            const chunks = await processor.processDiff(text1, text2);
+            
+            return {
+                chunks: chunks,
+                totalStats: chunks.reduce((acc, chunk) => ({
+                    additions: acc.additions + (chunk.stats?.additions || 0),
+                    deletions: acc.deletions + (chunk.stats?.deletions || 0),
+                    unchanged: acc.unchanged + (chunk.stats?.unchanged || 0)
+                }), { additions: 0, deletions: 0, unchanged: 0 }),
+                text1: text1,
+                text2: text2
+            };
+        }
+
+        // Generate HTML-formatted diff for display (HYBRID APPROACH)
+        async function generateHTMLDiff(html1, html2, options = {}) {
+            const result = await compareHTML(html1, html2, options);
+            const formattedHTML = htmlFormatter.formatDiffToHTML(result.chunks);
+            return htmlFormatter.cleanupHTML(formattedHTML);
+        }
+
+        // Generate plain text diff
+        async function generateTextDiff(html1, html2, options = {}) {
+            const result = await compareHTML(html1, html2, options);
+            let textDiff = '';
+            
+            result.chunks.forEach(chunk => {
+                chunk.diffs.forEach(([op, data]) => {
+                    switch(op) {
+                        case 1: textDiff += `[+] ${data}`; break;
+                        case -1: textDiff += `[-] ${data}`; break;
+                        case 0: textDiff += data; break;
+                    }
+                });
+            });
+            
+            return textDiff;
+        }
+
+        // Display diff in specified div element
+        async function displayDiff(html1, html2, targetElementId = 'displayHTML', options = {}) {
+            try {
+                const diffHTML = await generateHTMLDiff(html1, html2, options);
+                const targetElement = document.getElementById(targetElementId);
+                
+                if (targetElement) {
+                    targetElement.innerHTML = diffHTML;
+                } else {
+                    console.error(`Element with ID '${targetElementId}' not found`);
+                }
+            } catch (error) {
+                console.error('Error in displayDiff:', error);
+            }
+        }
+
+        // Get performance metrics
+        function getPerformanceMetrics() {
+            return {
+                memory: performance.memory ? {
+                    used: Math.round(performance.memory.usedJSHeapSize / 1024 / 1024),
+                    total: Math.round(performance.memory.totalJSHeapSize / 1024 / 1024),
+                    limit: Math.round(performance.memory.jsHeapSizeLimit / 1024 / 1024)
+                } : null,
+                timestamp: Date.now()
+            };
+        }
+
+        // Estimate processing requirements
+        function estimateProcessing(html1, html2) {
+            const totalSize = (html1.length + html2.length) / 1024;
+            return {
+                estimatedTime: Math.max(100, totalSize * 2),
+                estimatedMemory: Math.round(totalSize * 3),
+                recommendChunking: totalSize > 500,
+                complexity: totalSize > 1000 ? 'Very High' : 
+                           totalSize > 500 ? 'High' : 
+                           totalSize > 100 ? 'Medium' : 'Low',
+                totalSizeKB: Math.round(totalSize)
+            };
+        }
+
+        // ==============================================
+        // GLOBAL API
+        // ==============================================
+        window.ContractDiffAPI = {
+            htmlToPlainText: htmlToPlainText,
+            compareHTML: compareHTML,
+            generateHTMLDiff: generateHTMLDiff,
+            generateTextDiff: generateTextDiff,
+            displayDiff: displayDiff,
+            getPerformanceMetrics: getPerformanceMetrics,
+            estimateProcessing: estimateProcessing
+        };
+
+        // Make functions available globally
+        window.htmlToPlainText = htmlToPlainText;
+        window.compareHTML = compareHTML;
+        window.generateHTMLDiff = generateHTMLDiff;
+        window.generateTextDiff = generateTextDiff;
+        window.displayDiff = displayDiff;
+        window.getPerformanceMetrics = getPerformanceMetrics;
+        window.estimateProcessing = estimateProcessing;
+
+        console.log('Contract Diff API (Hybrid) loaded successfully!');
+    </script>
+</body>
+</html>
