@@ -339,6 +339,7 @@
       let isContentLoaded = false;
       let documentUUID = null;
       let variableValues = {};
+      let hasUnsavedChanges = false; // NEW: Track unsaved changes
 
       // ========================================
       // INICIALIZACIÓN DEL EDITOR
@@ -364,6 +365,7 @@
         // Eventos del editor
         quillEditor.on('text-change', function (delta, oldDelta, source) {
           if (source === 'user' && isContentLoaded) {
+            hasUnsavedChanges = true; // UPDATED: Mark as having unsaved changes
             notifyContentChanged();
           }
         });
@@ -463,6 +465,7 @@
 
             setTimeout(() => {
               isContentLoaded = true;
+              hasUnsavedChanges = false; // UPDATED: Reset unsaved changes flag when loading content
               showLoading(false);
             }, 100);
 
@@ -520,6 +523,7 @@
         clear: function () {
           if (quillEditor) {
             quillEditor.setText('');
+            hasUnsavedChanges = false; // UPDATED: Reset flag when clearing
             return true;
           }
           return false;
@@ -653,6 +657,9 @@
           timestamp: new Date().toISOString(),
         });
 
+        // UPDATED: Clear the unsaved changes flag after save
+        hasUnsavedChanges = false;
+
         // Feedback visual
         const saveBtn = document.getElementById('saveBtn');
         const originalText = saveBtn.innerHTML;
@@ -710,8 +717,9 @@
       // ========================================
       // PREVENIR PÉRDIDA DE DATOS
       // ========================================
+      // UPDATED: Now only shows warning when there are actual unsaved changes
       window.addEventListener('beforeunload', function (e) {
-        if (quillEditor && quillEditor.getText().trim().length > 0) {
+        if (hasUnsavedChanges) {
           e.preventDefault();
           e.returnValue = '';
           return '';
