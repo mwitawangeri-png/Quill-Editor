@@ -721,8 +721,9 @@
       window.addEventListener('beforeunload', function (e) {
         if (hasUnsavedChanges) {
           e.preventDefault();
-          e.returnValue = '';
-          return '';
+        const message = 'Tienes cambios sin guardar. ¿Estás seguro de que quieres salir?';
+          e.returnValue = message;
+          return message;
         }
       });
     </script>
