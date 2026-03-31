@@ -1,12 +1,13 @@
 /**
  * Updates variable values in an HTML string produced by the Quill editor.
- * Replaces old variable values with new ones inside any tag (e.g. <p>, <strong>, <span>).
- * Uses negative lookahead and lookbehind to prevent partial matches (e.g. "0" matching inside "2026").
+ * Targets elements with the "inserted_variable" class and a matching
+ * "data-variable-name" attribute using regex only — no DOM parser or
+ * external libraries required, safe for server-side use.
  *
- * @param {string} html - The HTML string from the Quill editor
+ * @param {string} html      - The HTML string from the Quill editor
  * @param {Object} oldValues - Map of variable name -> current/old value  e.g. { "Text variable": "Mr Crabs - Spongebob" }
  * @param {Object} newValues - Map of variable name -> new value           e.g. { "Text variable": "Mr Crabs - Spongebob 2" }
- * @returns {string} - Updated HTML string
+ * @returns {string}         - Updated HTML string
  */
 function updateHtmlVariableValues(html, oldValues, newValues) {
     try {
@@ -22,16 +23,18 @@ function updateHtmlVariableValues(html, oldValues, newValues) {
                 continue;
             }
 
-            // Escape any special regex characters in the old value
             const escapedOldValue = oldValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const escapedVariableName = variableName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-            // Use lookahead and lookbehind to match whole values only,
-            // preventing partial matches e.g. "0" matching inside "2026" or "1960"
-            const regex = new RegExp(`(?<![\\w])${escapedOldValue}(?![\\w])`, 'g');
+            // Match the entire element by class, data-variable-name and current text content.
+            // $1 and $2 preserve the opening and closing tags — only the text content is replaced.
+            const regex = new RegExp(
+                `(<strong[^>]*class="inserted_variable"[^>]*data-variable-name="${escapedVariableName}"[^>]*>)${escapedOldValue}(<\\/strong>)`,
+                'gi'
+            );
 
             const occurrencesBefore = (updatedHtml.match(regex) || []).length;
-
-            updatedHtml = updatedHtml.replace(regex, newValue);
+            updatedHtml = updatedHtml.replace(regex, `$1${newValue}$2`);
 
             console.log(`Variable "${variableName}": replaced ${occurrencesBefore} occurrence(s) of "${oldValue}" → "${newValue}"`);
         }
@@ -47,7 +50,23 @@ function updateHtmlVariableValues(html, oldValues, newValues) {
 
 // --- Example Usage ---
 
-const originalHtml = `<p><strong>Mr Crabs - Spongebob</strong></p><p><strong>200</strong></p><p><strong>Mar 20 2026</strong></p><p><span class="ql-cursor">﻿</span></p>`;
+// Variables are marked with the "inserted_variable" class and a "data-variable-name" attribute.
+// The regex targets only these elements, leaving any similar text elsewhere in the document untouched.
+const originalHtml = `
+    <p>
+        <strong class="inserted_variable" data-variable-name="Text variable">Mr Crabs - Spongebob</strong>
+    </p>
+    <p>
+        <strong class="inserted_variable" data-variable-name="Number Variable">200</strong>
+    </p>
+    <p>
+        <strong class="inserted_variable" data-variable-name="Date Variable">Mar 20 2026</strong>
+    </p>
+    <p>
+        This contract was signed in the year 2026 and references document 200.
+    </p>
+    <p><span class="ql-cursor">﻿</span></p>
+`;
 
 // The old (current) values that exist in the HTML
 const oldValues = {
@@ -65,6 +84,7 @@ const newValues = {
 
 const updatedHtml = updateHtmlVariableValues(originalHtml, oldValues, newValues);
 
+// "200" and "2026" in the plain paragraph text remain untouched
 console.log("Updated HTML:");
 console.log(updatedHtml);
 
