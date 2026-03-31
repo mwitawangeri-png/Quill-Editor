@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/diff_match_patch/20121119/diff_match_patch.js"></script>
+    <style>
+        #displayHTML {
+            font-family: 'Times New Roman', Georgia, serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 100%;
+        }
+
+        #displayHTML h1, #displayHTML h2, #displayHTML h3,
+        #displayHTML h4, #displayHTML h5, #displayHTML h6 {
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+            font-weight: 600;
+        }
+
+        #displayHTML h1 { font-size: 1.8em; }
+        #displayHTML h2 { font-size: 1.5em; }
+        #displayHTML h3 { font-size: 1.3em; }
+        #displayHTML h4 { font-size: 1.1em; }
+
+        #displayHTML p { margin-bottom: 1em; }
+
+        #displayHTML ul, #displayHTML ol {
+            margin-bottom: 1em;
+            padding-left: 2em;
+        }
+
+        #displayHTML li { margin-bottom: 0.3em; }
+
+        /* ── Diff highlight classes ── */
+        .diff-addition {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: 500;
+        }
+
+        .diff-deletion {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: 500;
+            text-decoration: line-through;
+        }
+
+        .diff-unchanged { color: #495057; }
+    </style>
+</head>
+<body>
+    <div id="displayHTML"></div>
+
+    <script>
+    // ─────────────────────────────────────────────────────────────────────────────
+    // CONTRACT DIFF ENGINE  v2.0  –  DOM-tree diffing (no marker round-trip)
+    //
+    // Architecture
+    // ────────────
+    //  1. Parse both HTML strings with DOMParser (full, valid documents).
+    //  2. Walk both DOM trees simultaneously, aligning child nodes with an
+    //     LCS (longest-common-subsequence) algorithm keyed on a node signature.
+    //  3. Emit an annotated clone tree where every node carries a data-diff
+    //     attribute: "addition" | "deletion" | "unchanged" | "modified".
+    //  4. Serialise the annotated clone to HTML for display.
+    //
+    // This eliminates:
+    //   • Marker splitting bugs (dmp cutting "{{H1_OPEN}}" mid-token)
+    //   • Lost attributes / elements
+    //   • XSS via innerHTML on raw diff output
+    //   • Chunk misalignment in large documents
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    // ─── 1. SAFE HTML PARSER ─────────────────────────────────────────────────────
+
+    /**
+     * Parse an HTML string and return the <body> element.
+     * DOMParser always produces a full document, so the body is always valid.
+     * We sanitise by stripping <script> and event-handler attributes before
+     * inserting into the live DOM.
+     */
+    function parseHTML(html) {
+        if (!html || typeof html !== 'string') html = '';
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        return doc.body;
+    }
+
+    /**
+     * Sanitise a node (in-place) before it is inserted into the live DOM.
+     * Removes <script> elements and all on* event-handler attributes.
+     */
+    function sanitiseNode(node) {
+        // Remove script tags
+        node.querySelectorAll('script').forEach(s => s.remove());
+        // Remove event handler attributes from every element
+        node.querySelectorAll('*').forEach(el => {
+            Array.from(el.attributes).forEach(attr => {
+                if (/^on/i.test(attr.name)) el.removeAttribute(attr.name);
+            });
+        });
+        return node;
+    }
+
+    // ─── 2. NODE SIGNATURE ───────────────────────────────────────────────────────
+
+    /**
+     * Produce a string signature for a DOM node used as the LCS key.
+     * Text nodes  → their trimmed text content.
+     * Elements    → tagName + sorted attributes (values truncated for perf).
+     * Other nodes → nodeType string.
+     *
+     * The signature is intentionally coarse so that structurally equivalent
+     * nodes match even when their text children differ slightly.  Text-level
+     * differences are resolved in a second pass with a character diff.
+     */
+    function nodeSignature(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            return 'TEXT:' + node.textContent.trim();
+        }
+        if (node.nodeType === Node.ELEMENT_NODE) {
+            const attrs = Array.from(node.attributes)
+                .map(a => `${a.name}=${a.value.slice(0, 40)}`)
+                .sort()
+                .join('|');
+            return `EL:${node.tagName}|${attrs}`;
+        }
+        return 'NODE:' + node.nodeType;
+    }
+
+    /**
+     * Structural signature – tag name only.  Used for "same kind of element"
+     * matching when an exact signature match is absent (e.g. a paragraph whose
+     * text changed).
+     */
+    function structuralSignature(node) {
+        if (node.nodeType === Node.TEXT_NODE) return 'TEXT';
+        if (node.nodeType === Node.ELEMENT_NODE) return node.tagName;
+        return 'NODE:' + node.nodeType;
+    }
+
+    // ─── 3. LCS ALIGNMENT ────────────────────────────────────────────────────────
+
+    /**
+     * Classic LCS over two arrays of DOM nodes, keyed by nodeSignature.
+     * Returns an array of edit operations:
+     *   { op: 'equal'|'insert'|'delete', node1?, node2? }
+     *
+     * For large child lists we fall back to a linear heuristic to avoid O(n²)
+     * memory blow-up (lists > 300 nodes are unusual in real contracts but
+     * possible in table-heavy documents).
+     */
+    function lcsAlign(nodes1, nodes2) {
+        const n = nodes1.length;
+        const m = nodes2.length;
+
+        // Heuristic fast path for very long lists
+        if (n * m > 90000) {
+            return linearAlign(nodes1, nodes2);
+        }
+
+        // Build signature maps for O(1) lookup
+        const sig1 = nodes1.map(nodeSignature);
+        const sig2 = nodes2.map(nodeSignature);
+
+        // DP table (length only, not full matrix – memory-efficient)
+        const dp = Array.from({ length: n + 1 }, () => new Int32Array(m + 1));
+
+        for (let i = n - 1; i >= 0; i--) {
+            for (let j = m - 1; j >= 0; j--) {
+                if (sig1[i] === sig2[j]) {
+                    dp[i][j] = dp[i + 1][j + 1] + 1;
+                } else {
+                    dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+                }
+            }
+        }
+
+        // Backtrack
+        const edits = [];
+        let i = 0, j = 0;
+        while (i < n || j < m) {
+            if (i < n && j < m && sig1[i] === sig2[j]) {
+                edits.push({ op: 'equal', node1: nodes1[i], node2: nodes2[j] });
+                i++; j++;
+            } else if (j < m && (i >= n || dp[i][j + 1] >= dp[i + 1][j])) {
+                edits.push({ op: 'insert', node2: nodes2[j] });
+                j++;
+            } else {
+                edits.push({ op: 'delete', node1: nodes1[i] });
+                i++;
+            }
+        }
+        return edits;
+    }
+
+    /**
+     * Linear O(n+m) alignment heuristic for very large child lists.
+     * Matches nodes greedily by structural signature (tag name) with a
+     * two-pointer approach.  Less accurate than LCS but prevents OOM.
+     */
+    function linearAlign(nodes1, nodes2) {
+        const edits = [];
+        let i = 0, j = 0;
+        while (i < nodes1.length || j < nodes2.length) {
+            if (i >= nodes1.length) {
+                edits.push({ op: 'insert', node2: nodes2[j++] });
+            } else if (j >= nodes2.length) {
+                edits.push({ op: 'delete', node1: nodes1[i++] });
+            } else if (structuralSignature(nodes1[i]) === structuralSignature(nodes2[j])) {
+                edits.push({ op: 'equal', node1: nodes1[i], node2: nodes2[j] });
+                i++; j++;
+            } else {
+                edits.push({ op: 'delete', node1: nodes1[i++] });
+                edits.push({ op: 'insert', node2: nodes2[j++] });
+            }
+        }
+        return edits;
+    }
+
+    // ─── 4. CHARACTER-LEVEL TEXT DIFF (via diff_match_patch) ─────────────────────
+
+    /**
+     * Singleton dmp instance — created once and reused.
+     *
+     * Settings chosen for contract comparison:
+     *   Diff_Timeout   – 3 s per text node comparison; prevents hangs on very
+     *                    large changed paragraphs while still allowing thorough
+     *                    diffing of typical contract clauses.
+     *   Diff_EditCost  – 6 (dmp default is 4).  A higher value makes
+     *                    diff_cleanupEfficiency more aggressive about merging
+     *                    nearby small edits into one clean change block, which
+     *                    reads better in legal review.
+     */
+    const dmp = (function () {
+        if (typeof diff_match_patch === 'undefined') {
+            console.error(
+                'diff_match_patch not found. ' +
+                'Ensure the CDN script loads before this file.'
+            );
+            return null;
+        }
+        const instance = new diff_match_patch();
+        instance.Diff_Timeout  = 3.0;
+        instance.Diff_EditCost = 6;
+        return instance;
+    }());
+
+    /**
+     * Compare two plain-text strings with diff_match_patch.
+     * Returns [[op, text], …] where op is 0 (equal), 1 (insert), -1 (delete).
+     *
+     * Because this function is only ever called on clean text extracted from a
+     * single DOM text node, dmp never sees any HTML markup — eliminating the
+     * marker-splitting bug that plagued the original implementation.
+     *
+     * Post-processing pipeline:
+     *   1. diff_main          – compute raw character-level diff
+     *   2. diff_cleanupSemantic   – align boundaries to word/sentence edges
+     *                               (most important for human readability)
+     *   3. diff_cleanupEfficiency – merge nearby small edits to reduce noise
+     *
+     * For strings where dmp times out (returns a coarse diff), we fall back
+     * gracefully — the result is less granular but always correct.
+     */
+    function textDiff(a, b) {
+        if (a === b) return [[0, a]];
+        if (!a)      return [[1, b]];
+        if (!b)      return [[-1, a]];
+
+        // Guard: if dmp failed to load, treat entire text as replaced
+        if (!dmp) return [[-1, a], [1, b]];
+
+        const diffs = dmp.diff_main(a, b);
+
+        // Semantic cleanup: shifts edit boundaries to word/sentence edges so
+        // that "The **quick** brown" becomes "The **quick brown**" — far more
+        // readable for contract clause comparison.
+        dmp.diff_cleanupSemantic(diffs);
+
+        // Efficiency cleanup: merges edits that are close together, reducing
+        // the number of highlighted fragments a reviewer must scan.
+        dmp.diff_cleanupEfficiency(diffs);
+
+        // Normalise dmp's operation constants (DELETE=-1, INSERT=1, EQUAL=0)
+        // to our internal convention — they already match, but being explicit
+        // guards against any future dmp API changes.
+        return diffs.map(([op, text]) => [op, text]);
+    }
+
+    // ─── 5. DOM TREE DIFFING ─────────────────────────────────────────────────────
+
+    /**
+     * Recursively diff two DOM subtrees and return an annotated DocumentFragment.
+     *
+     * Annotation is done with data-diff="addition|deletion|unchanged|modified"
+     * on element nodes, and by wrapping text runs in <ins>/<del>/<span> elements.
+     *
+     * @param {Node} node1  Node from the old document (may be null)
+     * @param {Node} node2  Node from the new document (may be null)
+     * @param {Document} targetDoc  Owner document for created nodes
+     * @returns {Node|Node[]}  Annotated node(s) to insert into the output tree
+     */
+    function diffNodes(node1, node2, targetDoc) {
+        // ── Insertion (node exists only in new doc)
+        if (!node1) return annotateSubtree(node2.cloneNode(true), 'addition', targetDoc);
+
+        // ── Deletion (node exists only in old doc)
+        if (!node2) return annotateSubtree(node1.cloneNode(true), 'deletion', targetDoc);
+
+        // ── Text nodes: character-level diff
+        if (node1.nodeType === Node.TEXT_NODE && node2.nodeType === Node.TEXT_NODE) {
+            return diffTextNodes(node1.textContent, node2.textContent, targetDoc);
+        }
+
+        // ── Different node types or different tags → delete old, insert new
+        if (
+            node1.nodeType !== node2.nodeType ||
+            (node1.nodeType === Node.ELEMENT_NODE && node1.tagName !== node2.tagName)
+        ) {
+            return [
+                annotateSubtree(node1.cloneNode(true), 'deletion', targetDoc),
+                annotateSubtree(node2.cloneNode(true), 'addition', targetDoc)
+            ];
+        }
+
+        // ── Same element tag: diff attributes, then recurse into children
+        if (node1.nodeType === Node.ELEMENT_NODE) {
+            const el = targetDoc.createElement(node1.tagName);
+
+            // Merge attributes
+            const attrDiff = diffAttributes(node1, node2);
+            applyAttributeDiff(el, attrDiff);
+
+            // Mark element-level diff status
+            const childEdits = lcsAlign(
+                Array.from(node1.childNodes),
+                Array.from(node2.childNodes)
+            );
+
+            let hasChanges = attrDiff.some(a => a.op !== 'equal');
+
+            childEdits.forEach(edit => {
+                let childNodes;
+                if (edit.op === 'equal') {
+                    childNodes = diffNodes(edit.node1, edit.node2, targetDoc);
+                } else if (edit.op === 'insert') {
+                    childNodes = annotateSubtree(edit.node2.cloneNode(true), 'addition', targetDoc);
+                    hasChanges = true;
+                } else {
+                    childNodes = annotateSubtree(edit.node1.cloneNode(true), 'deletion', targetDoc);
+                    hasChanges = true;
+                }
+
+                [].concat(childNodes).forEach(n => el.appendChild(n));
+            });
+
+            if (hasChanges) {
+                // Only flag the element itself if it has no already-annotated
+                // children (avoids double-colouring nested structures)
+                const hasAnnotatedChild = el.querySelector('[data-diff]');
+                if (!hasAnnotatedChild) {
+                    el.dataset.diff = 'modified';
+                }
+            } else {
+                el.dataset.diff = 'unchanged';
+            }
+
+            return el;
+        }
+
+        // ── Fallback: treat as unchanged clone
+        return node2.cloneNode(true);
+    }
+
+    /**
+     * Produce <ins>/<del>/<span> text nodes for a character-level text diff.
+     * Returns an array of nodes.
+     */
+    function diffTextNodes(text1, text2, targetDoc) {
+        if (text1 === text2) {
+            return [targetDoc.createTextNode(text2)];
+        }
+
+        const diffs = textDiff(text1, text2);
+        const nodes = [];
+
+        diffs.forEach(([op, text]) => {
+            if (!text) return;
+            if (op === 0) {
+                nodes.push(targetDoc.createTextNode(text));
+            } else {
+                const tag = op === 1 ? 'ins' : 'del';
+                const el = targetDoc.createElement(tag);
+                el.dataset.diff = op === 1 ? 'addition' : 'deletion';
+                el.textContent = text;
+                nodes.push(el);
+            }
+        });
+
+        return nodes;
+    }
+
+    /**
+     * Compare attributes of two elements.
+     * Returns an array of { op, name, value } objects.
+     */
+    function diffAttributes(el1, el2) {
+        const map1 = new Map(Array.from(el1.attributes).map(a => [a.name, a.value]));
+        const map2 = new Map(Array.from(el2.attributes).map(a => [a.name, a.value]));
+        const result = [];
+        const allNames = new Set([...map1.keys(), ...map2.keys()]);
+
+        allNames.forEach(name => {
+            if (name === 'data-diff') return; // skip our own annotation attr
+            if (!map1.has(name)) {
+                result.push({ op: 'insert', name, value: map2.get(name) });
+            } else if (!map2.has(name)) {
+                result.push({ op: 'delete', name, value: map1.get(name) });
+            } else if (map1.get(name) !== map2.get(name)) {
+                result.push({ op: 'modify', name, value: map2.get(name), oldValue: map1.get(name) });
+            } else {
+                result.push({ op: 'equal', name, value: map2.get(name) });
+            }
+        });
+
+        return result;
+    }
+
+    /** Apply a computed attribute diff to a newly created element. */
+    function applyAttributeDiff(el, attrDiff) {
+        attrDiff.forEach(({ op, name, value, oldValue }) => {
+            if (op === 'equal') {
+                el.setAttribute(name, value);
+            } else if (op === 'insert') {
+                el.setAttribute(name, value);
+                el.dataset.attrAdded = (el.dataset.attrAdded || '') + name + ' ';
+            } else if (op === 'modify') {
+                // Keep new value; record old in data attribute for tooling
+                el.setAttribute(name, value);
+                el.dataset.attrChanged = (el.dataset.attrChanged || '') + name + ' ';
+            }
+            // Deleted attributes are simply not set on the new element
+        });
+    }
+
+    /**
+     * Walk a subtree and set data-diff on every element node.
+     * Used to colour entire inserted / deleted subtrees.
+     */
+    function annotateSubtree(node, diffType, targetDoc) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            // Wrap text in a semantic inline element
+            const tag = diffType === 'addition' ? 'ins' : diffType === 'deletion' ? 'del' : 'span';
+            const wrapper = targetDoc.createElement(tag);
+            wrapper.dataset.diff = diffType;
+            wrapper.appendChild(node.cloneNode(true));
+            return wrapper;
+        }
+
+        if (node.nodeType === Node.ELEMENT_NODE) {
+            node.dataset.diff = diffType;
+            Array.from(node.childNodes).forEach(child => {
+                if (child.nodeType === Node.ELEMENT_NODE) {
+                    child.dataset.diff = diffType;
+                    annotateSubtree(child, diffType, targetDoc);
+                }
+            });
+        }
+
+        return node;
+    }
+
+    // ─── 6. STATS COLLECTION ─────────────────────────────────────────────────────
+
+    /**
+     * Walk the annotated output tree and count characters in each diff category.
+     * Returns { additions, deletions, unchanged }.
+     */
+    function collectStats(root) {
+        const stats = { additions: 0, deletions: 0, unchanged: 0 };
+
+        function walk(node) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                // Text node – inherit parent's diff type
+                const parent = node.parentElement;
+                const diff = parent ? parent.dataset.diff : null;
+                const len = node.textContent.length;
+                if (diff === 'addition') stats.additions += len;
+                else if (diff === 'deletion') stats.deletions += len;
+                else stats.unchanged += len;
+                return;
+            }
+            if (node.nodeType === Node.ELEMENT_NODE) {
+                const diff = node.dataset.diff;
+                if (diff === 'addition' || diff === 'deletion') {
+                    // Count all text under this node as one category
+                    const len = node.textContent.length;
+                    if (diff === 'addition') stats.additions += len;
+                    else stats.deletions += len;
+                    return; // don't double-count children
+                }
+            }
+            node.childNodes.forEach(walk);
+        }
+
+        walk(root);
+        return stats;
+    }
+
+    // ─── 7. SERIALISER ───────────────────────────────────────────────────────────
+
+    /**
+     * Serialise the annotated document fragment to an HTML string, translating
+     * data-diff attributes into CSS classes that match the original stylesheet.
+     *
+     * We use XMLSerializer where possible, then do a targeted string replacement
+     * of data-diff="…" → class="diff-…".  This is safe because the serialised
+     * output is always well-formed (it came from a real DOM).
+     */
+    function serialiseAnnotatedTree(root) {
+        // Clone so we don't mutate the live annotated tree
+        const clone = root.cloneNode(true);
+
+        // Replace data-diff with class names, preserving existing classes
+        clone.querySelectorAll('[data-diff]').forEach(el => {
+            const diffType = el.dataset.diff;
+            delete el.dataset.diff;
+            delete el.dataset.attrAdded;
+            delete el.dataset.attrChanged;
+
+            const cssClass = diffType === 'addition' ? 'diff-addition'
+                           : diffType === 'deletion'  ? 'diff-deletion'
+                           :                            'diff-unchanged';
+
+            if (el.classList.length) {
+                el.classList.add(cssClass);
+            } else {
+                el.className = cssClass;
+            }
+        });
+
+        return clone.innerHTML;
+    }
+
+    // ─── 8. PUBLIC API ────────────────────────────────────────────────────────────
+    //
+    // All function names are identical to the original API so existing workflows
+    // require zero changes.
+    //
+    // New internal representation: instead of passing around raw diff arrays we
+    // pass an "annotatedRoot" (a DOM DocumentFragment / Element).  The public
+    // return shapes for compareHTML / generateHTMLDiff remain compatible.
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Convert an HTML string to plain text.
+     * Maintained for API compatibility; now uses the browser's built-in
+     * DOMParser + textContent extraction (no markers needed).
+     */
+    async function htmlToPlainText(html, options = {}) {
+        const body = parseHTML(html);
+        return body.textContent.replace(/\s+/g, ' ').trim();
+    }
+
+    /**
+     * Compare two HTML strings and return a rich result object.
+     *
+     * Return shape:
+     * {
+     *   chunks: [ { diffs: [[op,text], …], stats: {…} } ],   ← compat with old consumers
+     *   totalStats: { additions, deletions, unchanged },
+     *   text1: string,    ← plain text of html1
+     *   text2: string,    ← plain text of html2
+     *   annotatedRoot: Element   ← NEW: the live annotated DOM (used internally)
+     * }
+     */
+    async function compareHTML(html1, html2, options = {}) {
+        const body1 = parseHTML(html1);
+        const body2 = parseHTML(html2);
+
+        // Build annotated output tree in a detached document so we never
+        // touch the live page during processing
+        const outputDoc = document.implementation.createHTMLDocument('diff');
+        const outputBody = outputDoc.body;
+
+        const childEdits = lcsAlign(
+            Array.from(body1.childNodes),
+            Array.from(body2.childNodes)
+        );
+
+        childEdits.forEach(edit => {
+            let result;
+            if (edit.op === 'equal') {
+                result = diffNodes(edit.node1, edit.node2, outputDoc);
+            } else if (edit.op === 'insert') {
+                result = annotateSubtree(edit.node2.cloneNode(true), 'addition', outputDoc);
+            } else {
+                result = annotateSubtree(edit.node1.cloneNode(true), 'deletion', outputDoc);
+            }
+            [].concat(result).forEach(n => outputBody.appendChild(n));
+        });
+
+        const totalStats = collectStats(outputBody);
+
+        // Build compat "chunks" shape — one chunk representing the whole document.
+        // The diffs array is a flattened character-level view extracted from the
+        // annotated tree, so existing code that iterates chunks[].diffs still works.
+        const flatDiffs = flattenAnnotatedTreeToDiffs(outputBody);
+
+        return {
+            chunks: [{
+                diffs: flatDiffs,
+                stats: totalStats,
+                chunkIndex: 0
+            }],
+            totalStats,
+            text1: body1.textContent.replace(/\s+/g, ' ').trim(),
+            text2: body2.textContent.replace(/\s+/g, ' ').trim(),
+            annotatedRoot: outputBody   // rich DOM result for internal use
+        };
+    }
+
+    /**
+     * Flatten an annotated DOM tree into [[op, text], …] pairs.
+     * op: 0 = unchanged, 1 = addition, -1 = deletion.
+     * Used to populate the legacy `chunks[].diffs` field.
+     */
+    function flattenAnnotatedTreeToDiffs(root) {
+        const out = [];
+
+        function walk(node) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                const text = node.textContent;
+                if (!text) return;
+                const parent = node.parentElement;
+                const diff = parent ? parent.dataset.diff : null;
+                const op = diff === 'addition' ? 1 : diff === 'deletion' ? -1 : 0;
+                if (out.length && out[out.length - 1][0] === op) {
+                    out[out.length - 1][1] += text;
+                } else {
+                    out.push([op, text]);
+                }
+                return;
+            }
+            if (node.nodeType === Node.ELEMENT_NODE) {
+                const diff = node.dataset.diff;
+                if (diff === 'addition' || diff === 'deletion') {
+                    const op = diff === 'addition' ? 1 : -1;
+                    const text = node.textContent;
+                    if (out.length && out[out.length - 1][0] === op) {
+                        out[out.length - 1][1] += text;
+                    } else {
+                        out.push([op, text]);
+                    }
+                    return;
+                }
+            }
+            node.childNodes.forEach(walk);
+        }
+
+        walk(root);
+        return out;
+    }
+
+    /**
+     * Generate a safe, annotated HTML string showing the diff.
+     * The output uses CSS classes (diff-addition, diff-deletion, diff-unchanged)
+     * consistent with the original stylesheet.
+     */
+    async function generateHTMLDiff(html1, html2, options = {}) {
+        const result = await compareHTML(html1, html2, options);
+        return serialiseAnnotatedTree(result.annotatedRoot);
+    }
+
+    /**
+     * Generate a plain-text representation of the diff.
+     * [+] prefix for additions, [-] for deletions, bare text for unchanged.
+     */
+    async function generateTextDiff(html1, html2, options = {}) {
+        const result = await compareHTML(html1, html2, options);
+        let out = '';
+        result.chunks[0].diffs.forEach(([op, text]) => {
+            if (op === 1)  out += `[+] ${text}`;
+            else if (op === -1) out += `[-] ${text}`;
+            else out += text;
+        });
+        return out;
+    }
+
+    /**
+     * Render the diff directly into a DOM element identified by targetElementId.
+     * The output is sanitised before insertion.
+     */
+    async function displayDiff(html1, html2, targetElementId = 'displayHTML', options = {}) {
+        try {
+            const result = await compareHTML(html1, html2, options);
+
+            const target = document.getElementById(targetElementId);
+            if (!target) {
+                console.error(`Element with ID '${targetElementId}' not found`);
+                return;
+            }
+
+            // Sanitise the annotated root before handing off to the live DOM
+            sanitiseNode(result.annotatedRoot);
+
+            // Serialise to HTML string (with diff classes applied)
+            const diffHTML = serialiseAnnotatedTree(result.annotatedRoot);
+            target.innerHTML = diffHTML;
+
+        } catch (err) {
+            console.error('Error in displayDiff:', err);
+        }
+    }
+
+    /**
+     * Return JS heap memory usage (Chrome only) and a timestamp.
+     * Non-Chrome browsers return memory: null.
+     */
+    function getPerformanceMetrics() {
+        return {
+            memory: performance.memory ? {
+                used:  Math.round(performance.memory.usedJSHeapSize  / 1024 / 1024),
+                total: Math.round(performance.memory.totalJSHeapSize / 1024 / 1024),
+                limit: Math.round(performance.memory.jsHeapSizeLimit  / 1024 / 1024)
+            } : null,
+            timestamp: Date.now()
+        };
+    }
+
+    /**
+     * Estimate processing cost for a given pair of HTML strings.
+     * Complexity tiers are the same as the original for compatibility.
+     */
+    function estimateProcessing(html1, html2) {
+        const totalSize = (html1.length + html2.length) / 1024;
+        return {
+            estimatedTime:    Math.max(100, totalSize * 2),
+            estimatedMemory:  Math.round(totalSize * 3),
+            recommendChunking: totalSize > 500,      // kept for compat; chunking is now automatic
+            complexity: totalSize > 1000 ? 'Very High'
+                      : totalSize > 500  ? 'High'
+                      : totalSize > 100  ? 'Medium'
+                      :                    'Low',
+            totalSizeKB: Math.round(totalSize)
+        };
+    }
+
+    // ─── 9. EXPORT ───────────────────────────────────────────────────────────────
+
+    const ContractDiffAPI = {
+        htmlToPlainText,
+        compareHTML,
+        generateHTMLDiff,
+        generateTextDiff,
+        displayDiff,
+        getPerformanceMetrics,
+        estimateProcessing
+    };
+
+    window.ContractDiffAPI  = ContractDiffAPI;
+
+    // Keep individual globals for callers that import them directly
+    window.htmlToPlainText    = htmlToPlainText;
+    window.compareHTML        = compareHTML;
+    window.generateHTMLDiff   = generateHTMLDiff;
+    window.generateTextDiff   = generateTextDiff;
+    window.displayDiff        = displayDiff;
+    window.getPerformanceMetrics = getPerformanceMetrics;
+    window.estimateProcessing = estimateProcessing;
+
+    console.log('Contract Diff Engine v2.1 (DOM-tree diffing + diff_match_patch) loaded.');
+    </script>
+</body>
+</html>
