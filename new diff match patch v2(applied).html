@@ -109,18 +109,40 @@
     // ─── 2. NODE SIGNATURE ───────────────────────────────────────────────────────
 
     /**
-     * Produce a string signature for a DOM node used as the LCS key.
-     * Text nodes  → their trimmed text content.
-     * Elements    → tagName + sorted attributes (values truncated for perf).
-     * Other nodes → nodeType string.
+     * STRUCTURAL signature — used as the LCS matching key.
      *
-     * The signature is intentionally coarse so that structurally equivalent
-     * nodes match even when their text children differ slightly.  Text-level
-     * differences are resolved in a second pass with a character diff.
+     * The critical design principle here is the separation of concerns:
+     *
+     *   • LCS alignment  → decides WHICH nodes to pair together
+     *   • diffNodes/dmp  → decides HOW the content of a pair differs
+     *
+     * If text content is included in the LCS key, a paragraph that gains a
+     * single word gets a completely different signature, LCS treats it as
+     * deleted+inserted, and the whole block renders red/green instead of
+     * showing just the changed word.
+     *
+     * By keeping signatures structural (tag + attributes only, never text),
+     * two paragraphs with slightly different content still match in LCS and
+     * fall through to diffNodes → diffTextNodes → dmp, which highlights only
+     * the words that actually changed.
+     *
+     * Text nodes
+     * ──────────
+     * A bare text node (direct child of body, or inside an element alongside
+     * other children) is keyed by its index position rather than its content.
+     * This means the i-th text node in doc1 always pairs with the i-th text
+     * node in doc2, letting dmp do the word-level comparison.
+     *
+     * Elements
+     * ────────
+     * Keyed by tagName + sorted non-content attributes only.  Two <p> tags
+     * with different body text produce identical signatures and are correctly
+     * paired for inline diffing.
      */
-    function nodeSignature(node) {
+    function nodeSignature(node, index) {
         if (node.nodeType === Node.TEXT_NODE) {
-            return 'TEXT:' + node.textContent.trim();
+            // Position-based key — content comparison is dmp's responsibility
+            return `TEXT:${index}`;
         }
         if (node.nodeType === Node.ELEMENT_NODE) {
             const attrs = Array.from(node.attributes)
@@ -129,13 +151,12 @@
                 .join('|');
             return `EL:${node.tagName}|${attrs}`;
         }
-        return 'NODE:' + node.nodeType;
+        return `NODE:${node.nodeType}:${index}`;
     }
 
     /**
-     * Structural signature – tag name only.  Used for "same kind of element"
-     * matching when an exact signature match is absent (e.g. a paragraph whose
-     * text changed).
+     * Structural signature — tag name only.
+     * Used by linearAlign (large-document heuristic) and by nodesAreSimilar.
      */
     function structuralSignature(node) {
         if (node.nodeType === Node.TEXT_NODE) return 'TEXT';
@@ -143,44 +164,115 @@
         return 'NODE:' + node.nodeType;
     }
 
+    /**
+     * Similarity check used to rescue pairings that LCS misses.
+     *
+     * When two element nodes share the same tag but their attributes differ
+     * (e.g. a <p class="old"> vs <p class="new">), their exact signatures
+     * won't match in LCS and they'll be treated as delete+insert.  This
+     * function catches that case and promotes them to an 'equal' pairing so
+     * diffNodes can recurse into their children and run the character diff.
+     *
+     * The similarity threshold is based on the Dice coefficient of their
+     * text content: two nodes whose text overlaps by more than 50% are
+     * almost certainly the same paragraph with minor edits.
+     */
+    function nodesAreSimilar(node1, node2) {
+        // Must be same node type
+        if (node1.nodeType !== node2.nodeType) return false;
+
+        // Text nodes: always considered similar (position already matched them)
+        if (node1.nodeType === Node.TEXT_NODE) return true;
+
+        // Elements: must share the same tag
+        if (node1.tagName !== node2.tagName) return false;
+
+        // For block elements, use text similarity to confirm pairing
+        const BLOCK_TAGS = new Set([
+            'P','LI','H1','H2','H3','H4','H5','H6',
+            'TD','TH','BLOCKQUOTE','DIV','SECTION','ARTICLE'
+        ]);
+        if (BLOCK_TAGS.has(node1.tagName)) {
+            return textSimilarity(
+                node1.textContent.trim(),
+                node2.textContent.trim()
+            ) > 0.5;
+        }
+
+        return true;
+    }
+
+    /**
+     * Dice coefficient — fraction of shared bigrams between two strings.
+     * Runs in O(n) and is robust to reordering within a paragraph.
+     * Returns a value in [0, 1] where 1 = identical.
+     */
+    function textSimilarity(a, b) {
+        if (!a && !b) return 1;
+        if (!a || !b) return 0;
+        if (a === b)  return 1;
+
+        const bigrams = str => {
+            const set = new Map();
+            for (let i = 0; i < str.length - 1; i++) {
+                const bg = str.slice(i, i + 2);
+                set.set(bg, (set.get(bg) || 0) + 1);
+            }
+            return set;
+        };
+
+        const ba = bigrams(a);
+        const bb = bigrams(b);
+        let intersection = 0;
+
+        ba.forEach((count, bg) => {
+            if (bb.has(bg)) intersection += Math.min(count, bb.get(bg));
+        });
+
+        return (2 * intersection) / (a.length + b.length - 2);
+    }
+
     // ─── 3. LCS ALIGNMENT ────────────────────────────────────────────────────────
 
     /**
-     * Classic LCS over two arrays of DOM nodes, keyed by nodeSignature.
-     * Returns an array of edit operations:
-     *   { op: 'equal'|'insert'|'delete', node1?, node2? }
+     * Align two arrays of sibling DOM nodes using LCS, then promote
+     * near-miss pairs via nodesAreSimilar.
      *
-     * For large child lists we fall back to a linear heuristic to avoid O(n²)
-     * memory blow-up (lists > 300 nodes are unusual in real contracts but
-     * possible in table-heavy documents).
+     * Two-phase approach
+     * ──────────────────
+     * Phase 1 — LCS on structural signatures.
+     *   Finds the longest sequence of nodes that match exactly by tag+attrs.
+     *   Correctly pairs unchanged paragraphs and identifies genuine insertions
+     *   and deletions.
+     *
+     * Phase 2 — similarity rescue.
+     *   Consecutive delete+insert pairs where the two nodes are structurally
+     *   similar (same tag, >50% text overlap) are promoted to 'equal' pairings.
+     *   This is what makes a paragraph with one added word render as inline
+     *   diff rather than full block delete+insert.
+     *
+     * For very large child lists (n×m > 90 000) we skip LCS and use the
+     * linear heuristic to avoid O(n²) memory usage.
      */
     function lcsAlign(nodes1, nodes2) {
         const n = nodes1.length;
         const m = nodes2.length;
 
-        // Heuristic fast path for very long lists
-        if (n * m > 90000) {
-            return linearAlign(nodes1, nodes2);
-        }
+        if (n * m > 90000) return linearAlign(nodes1, nodes2);
 
-        // Build signature maps for O(1) lookup
-        const sig1 = nodes1.map(nodeSignature);
-        const sig2 = nodes2.map(nodeSignature);
+        // ── Phase 1: LCS on structural signatures ────────────────────────────
+        const sig1 = nodes1.map((n, i) => nodeSignature(n, i));
+        const sig2 = nodes2.map((n, i) => nodeSignature(n, i));
 
-        // DP table (length only, not full matrix – memory-efficient)
         const dp = Array.from({ length: n + 1 }, () => new Int32Array(m + 1));
-
         for (let i = n - 1; i >= 0; i--) {
             for (let j = m - 1; j >= 0; j--) {
-                if (sig1[i] === sig2[j]) {
-                    dp[i][j] = dp[i + 1][j + 1] + 1;
-                } else {
-                    dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
-                }
+                dp[i][j] = sig1[i] === sig2[j]
+                    ? dp[i + 1][j + 1] + 1
+                    : Math.max(dp[i + 1][j], dp[i][j + 1]);
             }
         }
 
-        // Backtrack
         const edits = [];
         let i = 0, j = 0;
         while (i < n || j < m) {
@@ -195,7 +287,50 @@
                 i++;
             }
         }
-        return edits;
+
+        // ── Phase 2: similarity rescue ───────────────────────────────────────
+        // Walk the edit list and promote adjacent delete+insert (or insert+delete)
+        // pairs to 'equal' when the two nodes are similar enough to be the same
+        // paragraph with minor edits.  'equal' here means "recurse and diff
+        // inline" — the actual content change will still be highlighted by dmp.
+        return rescueSimilarPairs(edits);
+    }
+
+    /**
+     * Scan the LCS edit list for adjacent delete+insert pairs that refer to
+     * structurally similar nodes and promote them to paired 'equal' operations.
+     */
+    function rescueSimilarPairs(edits) {
+        const out = [];
+        let k = 0;
+        while (k < edits.length) {
+            const curr = edits[k];
+            const next = edits[k + 1];
+
+            // Pattern: delete followed immediately by insert
+            if (
+                curr.op === 'delete' && next && next.op === 'insert' &&
+                nodesAreSimilar(curr.node1, next.node2)
+            ) {
+                out.push({ op: 'equal', node1: curr.node1, node2: next.node2 });
+                k += 2;
+                continue;
+            }
+
+            // Pattern: insert followed immediately by delete (less common)
+            if (
+                curr.op === 'insert' && next && next.op === 'delete' &&
+                nodesAreSimilar(next.node1, curr.node2)
+            ) {
+                out.push({ op: 'equal', node1: next.node1, node2: curr.node2 });
+                k += 2;
+                continue;
+            }
+
+            out.push(curr);
+            k++;
+        }
+        return out;
     }
 
     /**
@@ -774,7 +909,7 @@
     window.getPerformanceMetrics = getPerformanceMetrics;
     window.estimateProcessing = estimateProcessing;
 
-    console.log('Contract Diff Engine v2.1 (DOM-tree diffing + diff_match_patch) loaded.');
+    console.log('Contract Diff Engine v2.2 (inline paragraph diffing + similarity rescue) loaded.');
     </script>
 </body>
 </html>
